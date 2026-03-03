@@ -31,6 +31,9 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options))
         },
       },
+      cookieOptions: {
+        maxAge: 60 * 60 * 24 * 365, // 1 year — browser never clears the cookie; actual session length is controlled by Supabase's refresh token (7-day sliding window on free plan)
+      },
     },
   )
 
