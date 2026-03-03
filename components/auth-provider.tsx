@@ -24,17 +24,28 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAdmin, setIsAdmin] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const isMountedRef = useRef(true)
+  const isLoadingRef = useRef(true) // mirrors isLoading without stale closure issues
   const lastCheckedEmailRef = useRef<string | null>(null)
-  const isCheckingRef = useRef(false)
+
+  const setLoading = useCallback((value: boolean) => {
+    isLoadingRef.current = value
+    setIsLoading(value)
+  }, [])
 
   const checkAdminStatus = useCallback(async (email: string): Promise<boolean> => {
     try {
       const supabase = createClient()
-      const result = await supabase
-        .from("admins")
-        .select("email")
-        .eq("email", email.toLowerCase())
-        .limit(1)
+      // Race the query against a 5-second timeout so it can never hang indefinitely
+      const result = await Promise.race([
+        supabase
+          .from("admins")
+          .select("email")
+          .eq("email", email.toLowerCase())
+          .limit(1),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("Admin check timeout")), 5000)
+        ),
+      ])
 
       if (result.error) {
         return false
@@ -67,7 +78,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(null)
           setIsAdmin(false)
           lastCheckedEmailRef.current = null
-          setIsLoading(false)
+          setLoading(false)
           return
         }
 
@@ -77,7 +88,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         // Skip admin check if we already checked this email
         if (currentEmail && currentEmail === lastCheckedEmailRef.current) {
           console.log("[v0] AuthProvider: same email, reusing admin status")
-          setIsLoading(false)
+          setLoading(false)
           return
         }
 
@@ -96,17 +107,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (isMountedRef.current) {
-          setIsLoading(false)
+          setLoading(false)
         }
       }
     )
 
-    // Safety timeout: if onAuthStateChange never fires (edge case),
-    // ensure we don't show spinner forever
+    // Safety timeout: if onAuthStateChange never fires or checkAdminStatus hangs,
+    // ensure we don't show spinner forever. Uses isLoadingRef to avoid stale closure.
     const timeout = setTimeout(() => {
-      if (isMountedRef.current && isLoading) {
+      if (isMountedRef.current && isLoadingRef.current) {
         console.log("[v0] AuthProvider: safety timeout, forcing isLoading=false")
-        setIsLoading(false)
+        setLoading(false)
       }
     }, 3000)
 
@@ -115,7 +126,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       subscription.unsubscribe()
       clearTimeout(timeout)
     }
-  }, [checkAdminStatus])
+  }, [checkAdminStatus, setLoading])
 
   const signOut = useCallback(async () => {
     try {
