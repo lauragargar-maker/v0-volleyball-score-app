@@ -30,6 +30,12 @@ export default function HomePage() {
   const [cancelReason, setCancelReason] = useState("")
   const [showCancelDialog, setShowCancelDialog] = useState(false)
   const [showNewMatchDialog, setShowNewMatchDialog] = useState(false)
+  const [showConfirmSetEndDialog, setShowConfirmSetEndDialog] = useState(false)
+  const [pendingSetData, setPendingSetData] = useState<{
+    updatedSet: Set
+    team: "home" | "away"
+    previousScore: number
+  } | null>(null)
   const [notification, setNotification] = useState<{
     show: boolean
     title: string
@@ -121,8 +127,11 @@ export default function HomePage() {
   const updateScore = async (team: "home" | "away", delta: number) => {
     if (!currentSet || !match) return
 
+    const isThirdSet = currentSet.set_number === 3
+    const scoreLimit = isThirdSet ? 15 : 25
     const field = team === "home" ? "home_score" : "away_score"
-    const newScore = Math.max(0, Math.min(25, currentSet[field] + delta))
+    const previousScore = currentSet[field]
+    const newScore = Math.max(0, Math.min(scoreLimit, previousScore + delta))
 
     const { data: updatedSet } = await supabase
       .from("sets")
@@ -135,8 +144,13 @@ export default function HomePage() {
       setCurrentSet(updatedSet)
       setSets((prev) => prev.map((s) => (s.id === updatedSet.id ? updatedSet : s)))
 
-      if (newScore >= 25 && Math.abs(updatedSet.home_score - updatedSet.away_score) >= 2) {
-        await finishSet(updatedSet)
+      const setEnds = isThirdSet
+        ? newScore >= 15
+        : newScore >= 25 && Math.abs(updatedSet.home_score - updatedSet.away_score) >= 2
+
+      if (setEnds) {
+        setPendingSetData({ updatedSet, team, previousScore })
+        setShowConfirmSetEndDialog(true)
       }
     }
   }
@@ -198,6 +212,30 @@ export default function HomePage() {
         showNotification(`Set ${set.set_number} finalizado`, `Comienza el Set ${newSet.set_number}`)
       }
     }
+  }
+
+  const handleConfirmSetEnd = async () => {
+    if (!pendingSetData) return
+    setShowConfirmSetEndDialog(false)
+    await finishSet(pendingSetData.updatedSet)
+    setPendingSetData(null)
+  }
+
+  const handleCancelSetEnd = async () => {
+    if (!pendingSetData) return
+    const field = pendingSetData.team === "home" ? "home_score" : "away_score"
+    const { data: revertedSet } = await supabase
+      .from("sets")
+      .update({ [field]: pendingSetData.previousScore })
+      .eq("id", pendingSetData.updatedSet.id)
+      .select()
+      .single()
+    if (revertedSet) {
+      setCurrentSet(revertedSet)
+      setSets((prev) => prev.map((s) => (s.id === revertedSet.id ? revertedSet : s)))
+    }
+    setShowConfirmSetEndDialog(false)
+    setPendingSetData(null)
   }
 
   const cancelMatch = async () => {
@@ -410,6 +448,43 @@ export default function HomePage() {
                 </div>
               </div>
 
+              {/* Set end confirmation dialog */}
+              <Dialog open={showConfirmSetEndDialog}>
+                <DialogContent
+                  onPointerDownOutside={(e: CustomEvent) => e.preventDefault()}
+                  onEscapeKeyDown={(e: KeyboardEvent) => { e.preventDefault(); handleCancelSetEnd() }}
+                >
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <Trophy className="h-5 w-5 text-primary" />
+                      Finalizar Set {pendingSetData?.updatedSet.set_number}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {pendingSetData && match && (
+                        <>
+                          <span className="font-medium">
+                            {pendingSetData.updatedSet.home_score > pendingSetData.updatedSet.away_score
+                              ? match.home_team
+                              : match.away_team}
+                          </span>{" "}
+                          gana el Set {pendingSetData.updatedSet.set_number} por{" "}
+                          {pendingSetData.updatedSet.home_score} – {pendingSetData.updatedSet.away_score}.{" "}
+                          ¿Confirmas el resultado?
+                        </>
+                      )}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <DialogFooter className="gap-2 sm:gap-0">
+                    <Button variant="outline" onClick={handleCancelSetEnd} className="bg-transparent">
+                      Cancelar
+                    </Button>
+                    <Button onClick={handleConfirmSetEnd}>
+                      Confirmar set
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
               {/* Score controls */}
               <div className="grid gap-4 sm:grid-cols-2">
                 {/* Home team */}
@@ -438,7 +513,7 @@ export default function HomePage() {
                         size="lg"
                         className="h-14 w-14 rounded-full bg-primary text-xl hover:bg-primary/90"
                         onClick={() => updateScore("home", 1)}
-                        disabled={!currentSet || currentSet.home_score >= 25}
+                        disabled={!currentSet || currentSet.home_score >= (currentSet.set_number === 3 ? 15 : 25)}
                       >
                         <Plus className="h-6 w-6" />
                         <span className="sr-only">Sumar punto local</span>
@@ -473,7 +548,7 @@ export default function HomePage() {
                         size="lg"
                         className="h-14 w-14 rounded-full bg-secondary text-xl hover:bg-secondary/90"
                         onClick={() => updateScore("away", 1)}
-                        disabled={!currentSet || currentSet.away_score >= 25}
+                        disabled={!currentSet || currentSet.away_score >= (currentSet.set_number === 3 ? 15 : 25)}
                       >
                         <Plus className="h-6 w-6" />
                         <span className="sr-only">Sumar punto visitante</span>
