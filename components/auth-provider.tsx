@@ -19,23 +19,76 @@ const AuthContext = createContext<AuthContextType>({
   signOut: async () => {},
 })
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
-  const [isAdmin, setIsAdmin] = useState(false)
-  const [isLoading, setIsLoading] = useState(true)
-  const isMountedRef = useRef(true)
-  const isLoadingRef = useRef(true) // mirrors isLoading without stale closure issues
-  const lastCheckedEmailRef = useRef<string | null>(null)
+// --- Sync localStorage helpers ---
 
-  const setLoading = useCallback((value: boolean) => {
-    isLoadingRef.current = value
-    setIsLoading(value)
-  }, [])
+function getSupabaseStorageKey(): string {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""
+  let projectRef = ""
+  if (url.includes(".supabase.co")) {
+    try { projectRef = new URL(url).hostname.split(".")[0] } catch {}
+  } else {
+    // Dashboard URL pattern: https://supabase.com/dashboard/project/{ref}
+    projectRef = url.split("/").filter(Boolean).pop() ?? ""
+  }
+  return `sb-${projectRef}-auth-token`
+}
+
+function readCachedSession(): User | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = localStorage.getItem(getSupabaseStorageKey())
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    const user = parsed?.user ?? null
+    if (!user?.email) return null
+    const expiresAt: number = parsed?.expires_at ?? 0
+    if (expiresAt && expiresAt < Math.floor(Date.now() / 1000)) return null
+    return user as User
+  } catch {
+    return null
+  }
+}
+
+function readCachedAdminStatus(email: string): boolean | null {
+  if (typeof window === "undefined") return null
+  try {
+    const val = localStorage.getItem(`volleyball-admin-${email}`)
+    if (val === "true") return true
+    if (val === "false") return false
+    return null
+  } catch {
+    return null
+  }
+}
+
+function writeCachedAdminStatus(email: string, isAdmin: boolean): void {
+  try {
+    localStorage.setItem(`volleyball-admin-${email}`, String(isAdmin))
+  } catch {}
+}
+
+function clearCachedAdminStatus(email: string): void {
+  try {
+    localStorage.removeItem(`volleyball-admin-${email}`)
+  } catch {}
+}
+
+// --- Component ---
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const cachedUser  = readCachedSession()
+  const cachedAdmin = cachedUser?.email ? readCachedAdminStatus(cachedUser.email) : null
+  const hasCache    = cachedUser !== null && cachedAdmin !== null
+
+  const [user, setUser] = useState<User | null>(cachedUser)
+  const [isAdmin, setIsAdmin] = useState(cachedAdmin ?? false)
+  const [isLoading, setIsLoading] = useState(!hasCache)
+  const isMountedRef = useRef(true)
+  const lastCheckedEmailRef = useRef<string | null>(cachedUser?.email ?? null)
 
   const checkAdminStatus = useCallback(async (email: string): Promise<boolean> => {
     try {
       const supabase = createClient()
-      // Race the query against a 5-second timeout so it can never hang indefinitely
       const result = await Promise.race([
         supabase
           .from("admins")
@@ -61,9 +114,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     isMountedRef.current = true
     const supabase = createClient()
 
-    // Use onAuthStateChange as the SOLE source of truth.
-    // Do NOT call getUser() separately - it can hang when there are
-    // multiple GoTrueClient instances or during token refresh races.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         console.log("[v0] AuthProvider: onAuthStateChange", { event, hasSession: !!session })
@@ -73,22 +123,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const currentUser = session?.user ?? null
         const currentEmail = currentUser?.email ?? null
 
-        // On SIGNED_OUT, reset everything
         if (event === "SIGNED_OUT" || !currentUser) {
+          const evictEmail = lastCheckedEmailRef.current
+          if (evictEmail) clearCachedAdminStatus(evictEmail)
           setUser(null)
           setIsAdmin(false)
           lastCheckedEmailRef.current = null
-          setLoading(false)
+          setIsLoading(false)
           return
         }
 
-        // Always update user from session
         setUser(currentUser)
 
         // Skip admin check if we already checked this email
         if (currentEmail && currentEmail === lastCheckedEmailRef.current) {
           console.log("[v0] AuthProvider: same email, reusing admin status")
-          setLoading(false)
+          setIsLoading(false)
           return
         }
 
@@ -100,6 +150,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             console.log("[v0] AuthProvider: admin check result", { email: currentEmail, adminStatus })
             if (isMountedRef.current) {
               setIsAdmin(adminStatus)
+              writeCachedAdminStatus(currentEmail, adminStatus)
             }
           } catch {
             // Silently handle
@@ -107,30 +158,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
 
         if (isMountedRef.current) {
-          setLoading(false)
+          setIsLoading(false)
         }
       }
     )
 
-    // Safety timeout: if onAuthStateChange never fires or checkAdminStatus hangs,
-    // ensure we don't show spinner forever. Uses isLoadingRef to avoid stale closure.
-    const timeout = setTimeout(() => {
-      if (isMountedRef.current && isLoadingRef.current) {
-        console.log("[v0] AuthProvider: safety timeout, forcing isLoading=false")
-        setLoading(false)
-      }
-    }, 3000)
-
     return () => {
       isMountedRef.current = false
       subscription.unsubscribe()
-      clearTimeout(timeout)
     }
-  }, [checkAdminStatus, setLoading])
+  }, [checkAdminStatus])
 
   const signOut = useCallback(async () => {
     try {
       const supabase = createClient()
+      const evictEmail = lastCheckedEmailRef.current
+      if (evictEmail) clearCachedAdminStatus(evictEmail)
       lastCheckedEmailRef.current = null
       await supabase.auth.signOut()
       if (isMountedRef.current) {
