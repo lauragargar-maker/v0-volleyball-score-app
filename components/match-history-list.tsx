@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { createClient } from "@/lib/supabase/client"
-import { useAuth } from "@/components/auth-provider"
 import type { Match, Set } from "@/lib/types"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -18,7 +17,6 @@ interface MatchHistoryListProps {
 }
 
 export function MatchHistoryList({ initialMatches }: MatchHistoryListProps) {
-  const { isAdmin } = useAuth()
   const [matches] = useState<Match[]>(initialMatches)
   const [selectedMatch, setSelectedMatch] = useState<Match | null>(null)
   const [matchSets, setMatchSets] = useState<Set[]>([])

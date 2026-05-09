@@ -1,19 +1,12 @@
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
-// Routes that require authentication
-const PROTECTED_ROUTES = ["/home", "/historial", "/solicitudes"]
-
-// Routes that authenticated users should be redirected away from
+const PROTECTED_ROUTES = ["/home", "/historial", "/solicitudes", "/club", "/clubs", "/onboarding"]
 const AUTH_ROUTES = ["/auth/login", "/auth/error"]
-
-// Public routes that anyone can access (no redirects)
-const PUBLIC_ROUTES = ["/", "/live"]
+const ONBOARDING_EXEMPT = ["/onboarding", "/clubs/new", "/clubs/join", "/auth"]
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({
-    request,
-  })
+  let supabaseResponse = NextResponse.next({ request })
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,51 +18,69 @@ export async function updateSession(request: NextRequest) {
         },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-          supabaseResponse = NextResponse.next({
-            request,
-          })
-          cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options))
+          supabaseResponse = NextResponse.next({ request })
+          cookiesToSet.forEach(({ name, value, options }) =>
+            supabaseResponse.cookies.set(name, value, options),
+          )
         },
       },
       cookieOptions: {
-        maxAge: 60 * 60 * 24 * 365, // 1 year — browser never clears the cookie; actual session length is controlled by Supabase's refresh token (7-day sliding window on free plan)
+        maxAge: 60 * 60 * 24 * 365,
       },
     },
   )
 
-  // Refresh session - this also handles token refresh automatically
   const {
     data: { user },
   } = await supabase.auth.getUser()
 
   const pathname = request.nextUrl.pathname
 
-  // Check if the route is a live score page (public, no redirects)
   if (pathname.startsWith("/live/")) {
     return supabaseResponse
   }
 
-  // Check if user is authenticated
+  // Legacy paths -> new equivalents
+  if (pathname === "/solicitar-acceso") {
+    return NextResponse.redirect(new URL("/auth/login", request.url))
+  }
+  if (pathname === "/solicitudes") {
+    return NextResponse.redirect(new URL("/club/requests", request.url))
+  }
+
   const isAuthenticated = !!user
 
-  // If authenticated user visits landing page, redirect to home
   if (isAuthenticated && pathname === "/") {
-    const redirectUrl = new URL("/home", request.url)
-    return NextResponse.redirect(redirectUrl)
+    return NextResponse.redirect(new URL("/home", request.url))
   }
 
-  // If authenticated user visits auth routes, redirect to home
-  if (isAuthenticated && AUTH_ROUTES.some((route) => pathname.startsWith(route))) {
-    const redirectUrl = new URL("/home", request.url)
-    return NextResponse.redirect(redirectUrl)
+  if (isAuthenticated && AUTH_ROUTES.some((r) => pathname.startsWith(r))) {
+    return NextResponse.redirect(new URL("/home", request.url))
   }
 
-  // If unauthenticated user visits protected routes, redirect to login
-  if (!isAuthenticated && PROTECTED_ROUTES.some((route) => pathname.startsWith(route))) {
+  if (!isAuthenticated && PROTECTED_ROUTES.some((r) => pathname.startsWith(r))) {
     const redirectUrl = new URL("/auth/login", request.url)
-    // Save the original URL to redirect back after login
     redirectUrl.searchParams.set("redirectTo", pathname)
     return NextResponse.redirect(redirectUrl)
+  }
+
+  // Membership gate: authenticated users with no memberships go to /onboarding.
+  if (isAuthenticated && !ONBOARDING_EXEMPT.some((r) => pathname.startsWith(r))) {
+    const { count: membershipCount } = await supabase
+      .from("club_members")
+      .select("club_id", { count: "exact", head: true })
+      .eq("user_id", user!.id)
+
+    if ((membershipCount ?? 0) === 0) {
+      const { count: pendingCount } = await supabase
+        .from("club_join_requests")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user!.id)
+        .eq("status", "pending")
+
+      const target = (pendingCount ?? 0) > 0 ? "/onboarding/pending" : "/onboarding"
+      return NextResponse.redirect(new URL(target, request.url))
+    }
   }
 
   return supabaseResponse

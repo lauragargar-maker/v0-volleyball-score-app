@@ -3,21 +3,29 @@
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
 import { useAuth } from "@/components/auth-provider"
+import { useClub } from "@/components/club-provider"
+import { ActiveClubBadge } from "@/components/active-club-badge"
 import { Button } from "@/components/ui/button"
 import { Home, History, Users, LogOut, Menu, X } from "lucide-react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 
-const navItems = [
-  { href: "/home", label: "Home", icon: Home },
-  { href: "/historial", label: "Historial", icon: History },
-  { href: "/solicitudes", label: "Solicitudes", icon: Users },
+const baseNavItems = [
+  { href: "/home", label: "Home", icon: Home, adminOnly: false },
+  { href: "/historial", label: "Historial", icon: History, adminOnly: false },
+  { href: "/club/requests", label: "Solicitudes", icon: Users, adminOnly: true },
 ]
 
 export function AuthenticatedHeader() {
   const pathname = usePathname()
   const router = useRouter()
   const { signOut, user } = useAuth()
+  const { isAdminOfActive } = useClub()
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+
+  const navItems = useMemo(
+    () => baseNavItems.filter((item) => !item.adminOnly || isAdminOfActive),
+    [isAdminOfActive],
+  )
 
   const handleSignOut = async () => {
     await signOut()
@@ -58,10 +66,9 @@ export function AuthenticatedHeader() {
         </nav>
 
         {/* Desktop User Menu */}
-        <div className="hidden md:flex items-center gap-4">
-          <span className="text-xs text-muted-foreground truncate max-w-[150px]">
-            {user?.email}
-          </span>
+        <div className="hidden md:flex items-center gap-3">
+          <ActiveClubBadge />
+          <span className="text-xs text-muted-foreground truncate max-w-[150px]">{user?.email}</span>
           <Button
             variant="ghost"
             size="sm"
@@ -88,6 +95,9 @@ export function AuthenticatedHeader() {
       {mobileMenuOpen && (
         <div className="md:hidden border-t border-border/40 bg-background">
           <nav className="container px-4 py-3 flex flex-col gap-1">
+            <div className="px-3 py-2">
+              <ActiveClubBadge />
+            </div>
             {navItems.map((item) => {
               const isActive = pathname === item.href
               const Icon = item.icon
@@ -108,9 +118,7 @@ export function AuthenticatedHeader() {
               )
             })}
             <div className="border-t border-border/40 mt-2 pt-2">
-              <p className="px-3 py-1 text-xs text-muted-foreground truncate">
-                {user?.email}
-              </p>
+              <p className="px-3 py-1 text-xs text-muted-foreground truncate">{user?.email}</p>
               <button
                 type="button"
                 onClick={handleSignOut}

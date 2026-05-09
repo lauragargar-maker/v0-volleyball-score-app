@@ -5,6 +5,7 @@ import type React from "react"
 import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useAuth } from "@/components/auth-provider"
+import { useClub } from "@/components/club-provider"
 import type { MatchMedia } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -19,7 +20,8 @@ interface MatchMediaGalleryProps {
 }
 
 export function MatchMediaGallery({ matchId, isOpen, onClose, matchTitle }: MatchMediaGalleryProps) {
-  const { isAdmin, user } = useAuth()
+  const { user } = useAuth()
+  const { isAdminOfActive } = useClub()
   const [media, setMedia] = useState<MatchMedia[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [isUploading, setIsUploading] = useState(false)
@@ -122,8 +124,8 @@ export function MatchMediaGallery({ matchId, isOpen, onClose, matchTitle }: Matc
           </DialogHeader>
 
           <div className="flex-1 overflow-y-auto">
-            {/* Upload section - only for admins */}
-            {isAdmin && (
+            {/* Upload section - available to all club members */}
+            {!!user && (
               <div className="mb-4 rounded-lg border border-dashed border-muted-foreground/30 p-4">
                 <div className="flex flex-col gap-3">
                   <Input
@@ -175,7 +177,7 @@ export function MatchMediaGallery({ matchId, isOpen, onClose, matchTitle }: Matc
                   <Film className="h-8 w-8 text-muted-foreground" />
                 </div>
                 <p className="text-muted-foreground">
-                  {isAdmin
+                  {!!user
                     ? "No hay fotos ni videos. ¡Añade el primer recuerdo!"
                     : "No hay fotos ni videos de este partido."}
                 </p>
@@ -228,7 +230,7 @@ export function MatchMediaGallery({ matchId, isOpen, onClose, matchTitle }: Matc
               <X className="h-4 w-4" />
             </Button>
 
-            {isAdmin && selectedMedia && (
+            {isAdminOfActive && selectedMedia && (
               <Button
                 variant="ghost"
                 size="icon"
