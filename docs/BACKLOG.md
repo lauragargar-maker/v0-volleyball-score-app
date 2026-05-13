@@ -43,9 +43,13 @@ in-progress section and appear in history. Investigate the Realtime channel
 filter and ensure `status`, `winner`, `finished_at`, and `cancellation_reason`
 changes all propagate correctly to every connected client.
 
----
-
-## Club profile
+### B7 — Admin editing of historical match results
+Club admins should be able to correct match results in the history section:
+add missing matches, edit scores or set results, and delete erroneous entries.
+Useful for backfilling results from matches that were not scored live, or
+fixing data entry mistakes. Regular members should remain read-only.
+RLS already restricts writes to club members with scorer lock; a dedicated
+edit flow would need to bypass or adapt that constraint for admin corrections.
 
 ### B5 — Club icon / image
 Allow club admins to upload a logo or avatar image for their club.
