@@ -112,6 +112,15 @@ export default function HomePage() {
     }
   }, [match, supabase])
 
+  // Auto-acquire the scorer lock when the match has no active scorer.
+  // Covers the case where the previous scorer's lock expired (cron cleanup)
+  // and they return to find the match still in progress.
+  useEffect(() => {
+    if (match && scorer.state.status === "unclaimed") {
+      scorer.acquire()
+    }
+  }, [match?.id, scorer.state.status, scorer.acquire])
+
   // Resolve scorer email for display.
   useEffect(() => {
     const id = scorer.scorerUserId
