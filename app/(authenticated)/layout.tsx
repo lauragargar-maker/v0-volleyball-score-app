@@ -2,14 +2,13 @@
 
 import type React from "react"
 import { useAuth } from "@/components/auth-provider"
+import { ClubProvider, useClub } from "@/components/club-provider"
 import { AuthenticatedHeader } from "@/components/authenticated-header"
 
-export default function AuthenticatedLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
-  const { isLoading } = useAuth()
+function Inner({ children }: { children: React.ReactNode }) {
+  const { isLoading: authLoading } = useAuth()
+  const { isLoading: clubLoading } = useClub()
+  const isLoading = authLoading || clubLoading
 
   if (isLoading) {
     return (
@@ -27,5 +26,13 @@ export default function AuthenticatedLayout({
       <AuthenticatedHeader />
       <main>{children}</main>
     </div>
+  )
+}
+
+export default function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <ClubProvider>
+      <Inner>{children}</Inner>
+    </ClubProvider>
   )
 }

@@ -1,7 +1,14 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState, useTransition } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { useAuth } from "@/components/auth-provider"
+import { useClub } from "@/components/club-provider"
+import { useActiveScorer } from "@/lib/hooks/use-active-scorer"
+import { LockedBanner } from "@/components/scoring/locked-banner"
+import { ReclaimDialog } from "@/components/scoring/reclaim-dialog"
+import { TimeoutWarning } from "@/components/scoring/timeout-warning"
+import { ReclaimedNoticeDialog } from "@/components/scoring/reclaimed-notice-dialog"
 import type { Match, Set } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -20,6 +27,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Plus, Minus, Play, Square, Share2, Loader2, Trophy, AlertTriangle, Check, X } from "lucide-react"
 
 export default function HomePage() {
+  const { user } = useAuth()
+  const { activeClub } = useClub()
+  const supabase = useMemo(() => createClient(), [])
+
   const [match, setMatch] = useState<Match | null>(null)
   const [sets, setSets] = useState<Set[]>([])
   const [currentSet, setCurrentSet] = useState<Set | null>(null)
@@ -43,17 +54,81 @@ export default function HomePage() {
     type: "success" | "error"
   }>({ show: false, title: "", description: "", type: "success" })
 
-  const supabase = createClient()
+  const [showReclaimDialog, setShowReclaimDialog] = useState(false)
+  const [isReclaiming, startReclaimTransition] = useTransition()
+  const [scorerEmails, setScorerEmails] = useState<Record<string, string>>({})
 
+  const scorer = useActiveScorer(match?.id ?? null)
+
+  // Pre-fill home team default when active club changes.
   useEffect(() => {
-    fetchActiveMatch()
-  }, [])
+    if (activeClub) setHomeTeam(activeClub.name)
+  }, [activeClub])
 
-  const fetchActiveMatch = async () => {
+  // Load active match for the active club.
+  useEffect(() => {
+    if (!activeClub) {
+      setIsLoading(false)
+      setMatch(null)
+      setSets([])
+      setCurrentSet(null)
+      return
+    }
+    fetchActiveMatch(activeClub.id)
+  }, [activeClub])
+
+  // Subscribe to score updates for the loaded match so locked viewers stay live.
+  useEffect(() => {
+    if (!match) return
+    const channel = supabase
+      .channel(`match-scoring:${match.id}`)
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "matches", filter: `id=eq.${match.id}` },
+        (payload) => setMatch(payload.new as Match),
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "sets", filter: `match_id=eq.${match.id}` },
+        (payload) => {
+          const updated = payload.new as Set
+          setSets((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
+          setCurrentSet((prev) => (prev && prev.id === updated.id ? updated : prev))
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "sets", filter: `match_id=eq.${match.id}` },
+        (payload) => {
+          const inserted = payload.new as Set
+          setSets((prev) => (prev.some((s) => s.id === inserted.id) ? prev : [...prev, inserted]))
+          if (inserted.status === "in_progress") setCurrentSet(inserted)
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [match, supabase])
+
+  // Resolve scorer email for display.
+  useEffect(() => {
+    const id = scorer.scorerUserId
+    if (!id) return
+    if (id === user?.id) return
+    if (scorerEmails[id]) return
+    supabase.rpc("get_shared_user_email", { _user_id: id }).then(({ data }) => {
+      if (data) setScorerEmails((prev) => ({ ...prev, [id]: data as string }))
+    })
+  }, [scorer.scorerUserId, user?.id, supabase, scorerEmails])
+
+  const fetchActiveMatch = async (clubId: string) => {
     setIsLoading(true)
     const { data: matchData } = await supabase
       .from("matches")
       .select("*")
+      .eq("club_id", clubId)
       .eq("status", "in_progress")
       .order("created_at", { ascending: false })
       .limit(1)
@@ -72,11 +147,16 @@ export default function HomePage() {
         const active = setsData.find((s) => s.status === "in_progress")
         setCurrentSet(active || null)
       }
+    } else {
+      setMatch(null)
+      setSets([])
+      setCurrentSet(null)
     }
     setIsLoading(false)
   }
 
   const startNewMatch = async () => {
+    if (!activeClub || !user) return
     if (!homeTeam.trim() || !awayTeam.trim()) {
       showNotification("Error", "Debes indicar el nombre de ambos equipos", "error")
       return
@@ -90,12 +170,26 @@ export default function HomePage() {
         home_team: homeTeam.trim(),
         away_team: awayTeam.trim(),
         status: "in_progress",
+        club_id: activeClub.id,
+        created_by: user.id,
       })
       .select()
       .single()
 
     if (matchError || !newMatch) {
       showNotification("Error", "No se pudo crear el partido", "error")
+      setIsStartingMatch(false)
+      return
+    }
+
+    // Acquire active scorer lock first so the subsequent set INSERT passes RLS.
+    const claim = await supabase.rpc("claim_active_scorer", {
+      _match_id: newMatch.id,
+      _force: false,
+      _expected_version: null,
+    })
+    if (claim.error) {
+      showNotification("Error", "No se pudo iniciar la gestion del marcador", "error")
       setIsStartingMatch(false)
       return
     }
@@ -116,7 +210,7 @@ export default function HomePage() {
       setCurrentSet(firstSet)
     }
 
-    setHomeTeam("")
+    setHomeTeam(activeClub.name)
     setAwayTeam("")
     setShowNewMatchDialog(false)
     setIsStartingMatch(false)
@@ -126,6 +220,7 @@ export default function HomePage() {
 
   const updateScore = async (team: "home" | "away", delta: number) => {
     if (!currentSet || !match) return
+    if (!scorer.isActiveScorer) return
 
     const isThirdSet = currentSet.set_number === 3
     const scoreLimit = isThirdSet ? 15 : 25
@@ -133,25 +228,35 @@ export default function HomePage() {
     const previousScore = currentSet[field]
     const newScore = Math.max(0, Math.min(scoreLimit, previousScore + delta))
 
-    const { data: updatedSet } = await supabase
+    // Refresh active scorer activity so the timeout doesn't fire mid-rally.
+    const touch = await scorer.touch()
+    if (!touch.ok) {
+      showNotification("Error", "Has perdido el control del marcador", "error")
+      return
+    }
+
+    const { data: updatedSet, error } = await supabase
       .from("sets")
       .update({ [field]: newScore })
       .eq("id", currentSet.id)
       .select()
       .single()
 
-    if (updatedSet) {
-      setCurrentSet(updatedSet)
-      setSets((prev) => prev.map((s) => (s.id === updatedSet.id ? updatedSet : s)))
+    if (error || !updatedSet) {
+      showNotification("Error", "No se pudo actualizar el marcador", "error")
+      return
+    }
 
-      const setEnds = isThirdSet
-        ? newScore >= 15
-        : newScore >= 25 && Math.abs(updatedSet.home_score - updatedSet.away_score) >= 2
+    setCurrentSet(updatedSet)
+    setSets((prev) => prev.map((s) => (s.id === updatedSet.id ? updatedSet : s)))
 
-      if (setEnds) {
-        setPendingSetData({ updatedSet, team, previousScore })
-        setShowConfirmSetEndDialog(true)
-      }
+    const setEnds = isThirdSet
+      ? newScore >= 15
+      : newScore >= 25 && Math.abs(updatedSet.home_score - updatedSet.away_score) >= 2
+
+    if (setEnds) {
+      setPendingSetData({ updatedSet, team, previousScore })
+      setShowConfirmSetEndDialog(true)
     }
   }
 
@@ -159,6 +264,7 @@ export default function HomePage() {
     if (!match) return
 
     const winner = set.home_score > set.away_score ? "home" : "away"
+    await scorer.touch()
 
     await supabase.from("sets").update({ status: "finished", winner }).eq("id", set.id)
 
@@ -177,8 +283,9 @@ export default function HomePage() {
         })
         .eq("id", match.id)
 
-      showNotification("Partido finalizado", `Ganador: ${newHomeSets >= 2 ? match.home_team : match.away_team}`)
+      await scorer.release()
 
+      showNotification("Partido finalizado", `Ganador: ${newHomeSets >= 2 ? match.home_team : match.away_team}`)
       setMatch(null)
       setSets([])
       setCurrentSet(null)
@@ -250,6 +357,8 @@ export default function HomePage() {
       })
       .eq("id", match.id)
 
+    await scorer.release()
+
     showNotification("Partido cancelado", cancelReason || "El partido ha sido cancelado")
 
     setMatch(null)
@@ -262,7 +371,6 @@ export default function HomePage() {
   const shareMatch = async () => {
     if (!match || !currentSet) return
 
-    // Generate public live score link
     const shareUrl = `${window.location.origin}/live/${match.id}`
     const scoreText = `${match.home_team} ${currentSet.home_score} - ${currentSet.away_score} ${match.away_team}`
     const setsText = `Sets: ${match.home_sets_won} - ${match.away_sets_won}`
@@ -274,7 +382,6 @@ export default function HomePage() {
     }
 
     const canShare = navigator.share && navigator.canShare?.(shareData)
-
     if (canShare) {
       try {
         await navigator.share(shareData)
@@ -305,6 +412,27 @@ export default function HomePage() {
     }, 3000)
   }
 
+  const handleReclaim = () => {
+    startReclaimTransition(async () => {
+      const result = await scorer.reclaim()
+      setShowReclaimDialog(false)
+      if (!result.ok) {
+        if (result.error === "version_conflict") {
+          showNotification("Otro miembro reclamo el marcador antes que tu", "Refresca para ver quien lo gestiona ahora", "error")
+        } else {
+          showNotification("Error", "No se pudo reclamar el marcador", "error")
+        }
+      }
+    })
+  }
+
+  const scorerLabel = (() => {
+    const id = scorer.scorerUserId
+    if (!id) return ""
+    if (id === user?.id) return user.email ?? "tu"
+    return scorerEmails[id] ?? "Otro miembro"
+  })()
+
   if (isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center">
@@ -312,6 +440,8 @@ export default function HomePage() {
       </div>
     )
   }
+
+  const isLocked = scorer.state.status === "locked_by_other"
 
   return (
     <div className="min-h-screen bg-background">
@@ -333,6 +463,20 @@ export default function HomePage() {
         </div>
       )}
 
+      <ReclaimedNoticeDialog
+        open={!!scorer.reclaimedNotice}
+        newScorerLabel={scorer.reclaimedNotice ? (scorerEmails[scorer.reclaimedNotice] ?? "Otro miembro") : ""}
+        onClose={scorer.dismissReclaimedNotice}
+      />
+
+      <ReclaimDialog
+        open={showReclaimDialog}
+        onOpenChange={setShowReclaimDialog}
+        currentScorerLabel={scorerLabel}
+        isPending={isReclaiming}
+        onConfirm={handleReclaim}
+      />
+
       <div className="px-4 py-6">
         <div className="mx-auto max-w-3xl space-y-6">
           {!match ? (
@@ -347,7 +491,7 @@ export default function HomePage() {
 
               <Dialog open={showNewMatchDialog} onOpenChange={setShowNewMatchDialog}>
                 <DialogTrigger asChild>
-                  <Button size="lg" className="gap-2">
+                  <Button size="lg" className="gap-2" disabled={!activeClub}>
                     <Play className="h-5 w-5" />
                     Iniciar nuevo partido
                   </Button>
@@ -394,6 +538,15 @@ export default function HomePage() {
             </Card>
           ) : (
             <>
+              {scorer.expiringSoon && scorer.isActiveScorer && <TimeoutWarning />}
+
+              {isLocked && (
+                <LockedBanner
+                  scorerLabel={scorerLabel || "Otro miembro"}
+                  onReclaim={() => setShowReclaimDialog(true)}
+                />
+              )}
+
               {/* Match info header */}
               <div className="flex items-center justify-between">
                 <div>
@@ -409,7 +562,7 @@ export default function HomePage() {
                   </Button>
                   <Dialog open={showCancelDialog} onOpenChange={setShowCancelDialog}>
                     <DialogTrigger asChild>
-                      <Button variant="destructive" size="sm">
+                      <Button variant="destructive" size="sm" disabled={!scorer.isActiveScorer}>
                         <Square className="mr-1 h-4 w-4" />
                         Finalizar
                       </Button>
@@ -452,7 +605,10 @@ export default function HomePage() {
               <Dialog open={showConfirmSetEndDialog}>
                 <DialogContent
                   onPointerDownOutside={(e: CustomEvent) => e.preventDefault()}
-                  onEscapeKeyDown={(e: KeyboardEvent) => { e.preventDefault(); handleCancelSetEnd() }}
+                  onEscapeKeyDown={(e: KeyboardEvent) => {
+                    e.preventDefault()
+                    handleCancelSetEnd()
+                  }}
                 >
                   <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
@@ -478,9 +634,7 @@ export default function HomePage() {
                     <Button variant="outline" onClick={handleCancelSetEnd} className="bg-transparent">
                       Cancelar
                     </Button>
-                    <Button onClick={handleConfirmSetEnd}>
-                      Confirmar set
-                    </Button>
+                    <Button onClick={handleConfirmSetEnd}>Confirmar set</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -504,7 +658,9 @@ export default function HomePage() {
                         variant="outline"
                         className="h-14 w-14 rounded-full text-xl bg-transparent"
                         onClick={() => updateScore("home", -1)}
-                        disabled={!currentSet || currentSet.home_score <= 0}
+                        disabled={
+                          !scorer.isActiveScorer || !currentSet || currentSet.home_score <= 0
+                        }
                       >
                         <Minus className="h-6 w-6" />
                         <span className="sr-only">Restar punto local</span>
@@ -513,7 +669,11 @@ export default function HomePage() {
                         size="lg"
                         className="h-14 w-14 rounded-full bg-primary text-xl hover:bg-primary/90"
                         onClick={() => updateScore("home", 1)}
-                        disabled={!currentSet || currentSet.home_score >= (currentSet.set_number === 3 ? 15 : 25)}
+                        disabled={
+                          !scorer.isActiveScorer ||
+                          !currentSet ||
+                          currentSet.home_score >= (currentSet.set_number === 3 ? 15 : 25)
+                        }
                       >
                         <Plus className="h-6 w-6" />
                         <span className="sr-only">Sumar punto local</span>
@@ -539,7 +699,9 @@ export default function HomePage() {
                         variant="outline"
                         className="h-14 w-14 rounded-full text-xl bg-transparent"
                         onClick={() => updateScore("away", -1)}
-                        disabled={!currentSet || currentSet.away_score <= 0}
+                        disabled={
+                          !scorer.isActiveScorer || !currentSet || currentSet.away_score <= 0
+                        }
                       >
                         <Minus className="h-6 w-6" />
                         <span className="sr-only">Restar punto visitante</span>
@@ -548,7 +710,11 @@ export default function HomePage() {
                         size="lg"
                         className="h-14 w-14 rounded-full bg-secondary text-xl hover:bg-secondary/90"
                         onClick={() => updateScore("away", 1)}
-                        disabled={!currentSet || currentSet.away_score >= (currentSet.set_number === 3 ? 15 : 25)}
+                        disabled={
+                          !scorer.isActiveScorer ||
+                          !currentSet ||
+                          currentSet.away_score >= (currentSet.set_number === 3 ? 15 : 25)
+                        }
                       >
                         <Plus className="h-6 w-6" />
                         <span className="sr-only">Sumar punto visitante</span>

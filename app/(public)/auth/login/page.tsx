@@ -1,7 +1,8 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useRef } from "react"
+import { Turnstile, type TurnstileInstance } from "@marsidev/react-turnstile"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -17,35 +18,37 @@ export default function LoginPage() {
   const [step, setStep] = useState<"email" | "otp">("email")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null)
+  const turnstileRef = useRef<TurnstileInstance>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
 
+  const siteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY
+
   const handleSendOtp = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (siteKey && !captchaToken) {
+      setError("Por favor completa la verificación de seguridad.")
+      return
+    }
+
     setIsLoading(true)
     setError(null)
 
     const supabase = createClient()
 
-    // First check if email is registered as admin
-    const { data: adminData, error: adminError } = await supabase
-      .from("admins")
-      .select("email")
-      .eq("email", email.toLowerCase())
-      .maybeSingle()
-
-    if (adminError || !adminData) {
-      setError("Este email no esta registrado como administrador")
-      setIsLoading(false)
-      return
-    }
-
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email: email.toLowerCase(),
       options: {
         shouldCreateUser: true,
+        ...(captchaToken ? { captchaToken } : {}),
       },
     })
+
+    // Reset the widget so it's fresh if the user goes back
+    turnstileRef.current?.reset()
+    setCaptchaToken(null)
 
     if (otpError) {
       setError(otpError.message)
@@ -76,9 +79,14 @@ export default function LoginPage() {
       return
     }
 
-    // Redirect to original destination or home
     const redirectTo = searchParams.get("redirectTo") || "/home"
     router.push(redirectTo)
+  }
+
+  const handleBack = () => {
+    setStep("email")
+    setOtp("")
+    setError(null)
   }
 
   return (
@@ -94,10 +102,10 @@ export default function LoginPage() {
               )}
             </div>
             <CardTitle className="text-2xl font-bold">
-              {step === "email" ? "Acceso Admin" : "Verificar codigo"}
+              {step === "email" ? "Iniciar sesión" : "Verificar codigo"}
             </CardTitle>
             <CardDescription>
-              {step === "email" ? "Introduce tu email de administrador" : `Enviamos un codigo a ${email}`}
+              {step === "email" ? "Introduce tu email para acceder" : `Enviamos un codigo a ${email}`}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -108,7 +116,7 @@ export default function LoginPage() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="admin@equipo.com"
+                    placeholder="usuario@ejemplo.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     required
@@ -116,8 +124,25 @@ export default function LoginPage() {
                     className="h-12"
                   />
                 </div>
+
+                {siteKey && (
+                  <div className="flex justify-center">
+                    <Turnstile
+                      ref={turnstileRef}
+                      siteKey={siteKey}
+                      onSuccess={(token) => setCaptchaToken(token)}
+                      onExpire={() => setCaptchaToken(null)}
+                      onError={() => setCaptchaToken(null)}
+                    />
+                  </div>
+                )}
+
                 {error && <p className="text-sm text-destructive">{error}</p>}
-                <Button type="submit" className="h-12 w-full bg-primary hover:bg-primary/90" disabled={isLoading}>
+                <Button
+                  type="submit"
+                  className="h-12 w-full bg-primary hover:bg-primary/90"
+                  disabled={isLoading || (!!siteKey && !captchaToken)}
+                >
                   {isLoading ? (
                     <>
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -155,16 +180,7 @@ export default function LoginPage() {
                     "Verificar"
                   )}
                 </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="w-full"
-                  onClick={() => {
-                    setStep("email")
-                    setOtp("")
-                    setError(null)
-                  }}
-                >
+                <Button type="button" variant="ghost" className="w-full" onClick={handleBack}>
                   <ArrowLeft className="mr-2 h-4 w-4" />
                   Cambiar email
                 </Button>
