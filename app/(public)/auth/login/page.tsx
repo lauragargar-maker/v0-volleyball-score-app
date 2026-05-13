@@ -27,19 +27,6 @@ export default function LoginPage() {
 
     const supabase = createClient()
 
-    // First check if email is registered as admin
-    const { data: adminData, error: adminError } = await supabase
-      .from("admins")
-      .select("email")
-      .eq("email", email.toLowerCase())
-      .maybeSingle()
-
-    if (adminError || !adminData) {
-      setError("Este email no esta registrado como administrador")
-      setIsLoading(false)
-      return
-    }
-
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email: email.toLowerCase(),
       options: {
@@ -94,10 +81,10 @@ export default function LoginPage() {
               )}
             </div>
             <CardTitle className="text-2xl font-bold">
-              {step === "email" ? "Acceso Admin" : "Verificar codigo"}
+              {step === "email" ? "Iniciar sesión" : "Verificar codigo"}
             </CardTitle>
             <CardDescription>
-              {step === "email" ? "Introduce tu email de administrador" : `Enviamos un codigo a ${email}`}
+              {step === "email" ? "Introduce tu email para acceder" : `Enviamos un codigo a ${email}`}
             </CardDescription>
           </CardHeader>
           <CardContent>
