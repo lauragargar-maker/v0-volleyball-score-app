@@ -102,13 +102,15 @@ DECLARE
   legacy_role TEXT;
 BEGIN
   -- Look up if this email exists in the legacy admins table.
+  -- Schema-qualify all public tables: this function fires from the auth schema
+  -- context and the search_path may not include public.
   IF NOT EXISTS (
-    SELECT 1 FROM admins WHERE LOWER(email) = LOWER(NEW.email)
+    SELECT 1 FROM public.admins WHERE LOWER(email) = LOWER(NEW.email)
   ) THEN
     RETURN NEW;
   END IF;
 
-  SELECT id INTO bfo FROM clubs WHERE name = 'BFO CHV 1995';
+  SELECT id INTO bfo FROM public.clubs WHERE name = 'BFO CHV 1995';
   IF bfo IS NULL THEN
     RETURN NEW;
   END IF;
@@ -120,13 +122,16 @@ BEGIN
     legacy_role := 'member';
   END IF;
 
-  INSERT INTO club_members (club_id, user_id, role)
+  INSERT INTO public.club_members (club_id, user_id, role)
   VALUES (bfo, NEW.id, legacy_role)
   ON CONFLICT (club_id, user_id) DO NOTHING;
 
   RETURN NEW;
+EXCEPTION WHEN OTHERS THEN
+  -- Never block user creation due to enrollment errors.
+  RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 DROP TRIGGER IF EXISTS trg_enroll_legacy_admin ON auth.users;
 CREATE TRIGGER trg_enroll_legacy_admin
