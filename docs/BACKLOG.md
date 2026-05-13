@@ -33,6 +33,16 @@ two team names and start scoring. The session could be ephemeral (localStorage)
 or optionally saved to an account afterwards. This is the main acquisition
 lever for converting visitors into registered users.
 
+### B6 — Authenticated home view does not auto-update when a match ends
+The home screen's Realtime subscription currently refreshes the UI when a
+score is updated (set scores, sets won) but it is unclear whether it also
+triggers a re-render when a match transitions to `finished` or `cancelled`
+status without a concurrent score change. Viewers on the authenticated home
+screen may need to manually refresh to see a match disappear from the
+in-progress section and appear in history. Investigate the Realtime channel
+filter and ensure `status`, `winner`, `finished_at`, and `cancellation_reason`
+changes all propagate correctly to every connected client.
+
 ---
 
 ## Club profile
