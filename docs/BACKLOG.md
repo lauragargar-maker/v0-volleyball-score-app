@@ -54,3 +54,10 @@ the upload infrastructure is in place. The image would:
 - Replace or complement the club name in the header on all screen sizes
 - Directly address B1 on mobile (small logo fits where a name does not)
 - Appear in club search results (Phase 3) and member management pages (Phase 4)
+
+---
+
+## Match management
+
+### B7 — Allow admins to manage history about matches
+Allow admins to edit, delete or even create past matches (to solve errors or add matches that were not scored with the app). Bulk upload may be considered in the future.
