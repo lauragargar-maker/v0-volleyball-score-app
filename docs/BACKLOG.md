@@ -61,3 +61,10 @@ the upload infrastructure is in place. The image would:
 
 ### B7 — Allow admins to manage history about matches
 Allow admins to edit, delete or even create past matches (to solve errors or add matches that were not scored with the app). Bulk upload may be considered in the future.
+
+---
+
+## User management
+
+### B8 — Allow users to create a password to authenticate
+Allow users to use a password instead of OTP. May be better for heavy users.
