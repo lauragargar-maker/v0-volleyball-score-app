@@ -6,22 +6,40 @@ import { Button } from "@/components/ui/button"
 import { Activity, Users, Clock, Share2, ChevronRight, Zap } from "lucide-react"
 import { InstantScoreWaitlistModal } from "@/components/landing/instant-score-waitlist-modal"
 import { LiveScorePreview } from "@/components/landing/live-score-preview"
+import {
+  HistoryListFragment,
+  ScoreWidgetFragment,
+  ShareLinkFragment,
+} from "@/components/landing/feature-fragments"
 
-const features = [
+import type { ComponentType } from "react"
+import type { LucideIcon } from "lucide-react"
+
+interface Feature {
+  icon: LucideIcon
+  title: string
+  description: string
+  fragment?: ComponentType
+}
+
+const features: Feature[] = [
   {
     icon: Activity,
     title: "Marcador en Tiempo Real",
     description: "Actualiza puntos al instante y todos los espectadores ven los cambios en vivo.",
+    fragment: ScoreWidgetFragment,
   },
   {
     icon: Users,
     title: "Fácil de Compartir",
     description: "Comparte el enlace del partido con familiares y amigos con un solo clic.",
+    fragment: ShareLinkFragment,
   },
   {
     icon: Clock,
     title: "Historial Completo",
     description: "Guarda automáticamente el resultado de cada partido para consultarlo después.",
+    fragment: HistoryListFragment,
   },
   {
     icon: Share2,
@@ -115,14 +133,19 @@ export default function LandingPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {features.map((feature) => {
             const Icon = feature.icon
+            const Fragment = feature.fragment
             return (
               <div
                 key={feature.title}
                 className="p-6 rounded-xl border border-border/60 bg-card hover:border-primary/40 transition-colors"
               >
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                  <Icon className="w-5 h-5 text-primary" />
-                </div>
+                {Fragment ? (
+                  <Fragment />
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                    <Icon className="w-5 h-5 text-primary" />
+                  </div>
+                )}
                 <h3 className="font-semibold text-foreground mb-2">{feature.title}</h3>
                 <p className="text-sm text-muted-foreground">{feature.description}</p>
               </div>
