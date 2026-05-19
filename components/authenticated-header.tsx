@@ -6,13 +6,12 @@ import { useAuth } from "@/components/auth-provider"
 import { useClub } from "@/components/club-provider"
 import { ActiveClubBadge } from "@/components/active-club-badge"
 import { Button } from "@/components/ui/button"
-import { Home, History, Users, LogOut, Menu, X } from "lucide-react"
+import { Home, History, LogOut, Menu, X } from "lucide-react"
 import { useMemo, useState } from "react"
 
 const baseNavItems = [
   { href: "/home", label: "Home", icon: Home, adminOnly: false },
   { href: "/historial", label: "Historial", icon: History, adminOnly: false },
-  { href: "/club/requests", label: "Solicitudes", icon: Users, adminOnly: true },
 ]
 
 export function AuthenticatedHeader() {
@@ -76,7 +75,7 @@ export function AuthenticatedHeader() {
             className="text-muted-foreground hover:text-foreground"
           >
             <LogOut className="w-4 h-4 mr-2" />
-            Cerrar Sesion
+            Cerrar Sesión
           </Button>
         </div>
 
@@ -125,7 +124,7 @@ export function AuthenticatedHeader() {
                 className="flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted w-full"
               >
                 <LogOut className="w-4 h-4" />
-                Cerrar Sesion
+                Cerrar Sesión
               </button>
             </div>
           </nav>

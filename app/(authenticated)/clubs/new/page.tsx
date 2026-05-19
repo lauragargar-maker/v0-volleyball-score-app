@@ -52,7 +52,7 @@ export default function NewClubPage() {
           <div className="mb-6">
             <h1 className="text-2xl font-bold">Crear un club</h1>
             <p className="text-sm text-muted-foreground">
-              Te convertiras automaticamente en el primer admin del club.
+              Podrás apuntar partidos, compartirlos y guardarlos en el histórico del club.
             </p>
           </div>
 
