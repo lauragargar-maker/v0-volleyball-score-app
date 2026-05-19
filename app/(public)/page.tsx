@@ -83,7 +83,7 @@ export default function LandingPage() {
 
           {/* Headline */}
           <h1 className="text-4xl md:text-6xl font-bold tracking-tight text-foreground max-w-3xl text-balance">
-            Controla los partidos de tu equipo en tiempo real
+            Anota los partidos de tu equipo en tiempo real
           </h1>
 
           {/* Subheadline */}
