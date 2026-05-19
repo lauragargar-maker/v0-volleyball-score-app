@@ -1,3 +1,5 @@
+"use client"
+
 import Link from "next/link"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -22,7 +24,7 @@ export default function OnboardingPage() {
             <div>
               <h2 className="text-lg font-semibold">Crear un club</h2>
               <p className="text-sm text-muted-foreground">
-                Crea un club nuevo y conviertete en su primer admin.
+                Crea un club nuevo y empieza a guardar info de partidos
               </p>
             </div>
             <Button asChild className="w-full">
@@ -40,8 +42,14 @@ export default function OnboardingPage() {
                 Solicita unirte a un club existente buscandolo por nombre o codigo.
               </p>
             </div>
-            <Button asChild variant="outline" className="w-full" disabled>
-              <Link href="/clubs/join">Proximamente</Link>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => {
+                /* TODO: emit analytics event when instrumentation lands */
+              }}
+            >
+              Proximamente
             </Button>
           </Card>
         </div>

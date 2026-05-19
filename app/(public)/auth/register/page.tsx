@@ -9,25 +9,26 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ArrowLeft, Mail, KeyRound, Loader2, Info } from "lucide-react"
+import { ArrowLeft, UserPlus, KeyRound, Loader2, Info } from "lucide-react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { emailExists } from "../actions"
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const searchParams = useSearchParams()
   const initialEmail = searchParams.get("email") ?? ""
-  const divertedFromRegister = searchParams.get("divertedFrom") === "register"
+  const divertedFromLogin = searchParams.get("divertedFrom") === "login"
 
   const [email, setEmail] = useState(initialEmail)
+  const [displayName, setDisplayName] = useState("")
   const [otp, setOtp] = useState("")
   const [step, setStep] = useState<"email" | "otp">("email")
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [captchaToken, setCaptchaToken] = useState<string | null>(null)
   const [divertMessage, setDivertMessage] = useState<string | null>(
-    divertedFromRegister
-      ? "Este correo ya tiene una cuenta. Te llevamos al inicio de sesión."
+    divertedFromLogin
+      ? "Este correo aún no está registrado. Te llevamos al registro para que crees tu cuenta."
       : null,
   )
   const turnstileRef = useRef<TurnstileInstance>(null)
@@ -53,17 +54,19 @@ export default function LoginPage() {
 
     const { exists } = await emailExists(email)
 
-    if (!exists) {
-      const params = new URLSearchParams({ email, divertedFrom: "login" })
-      router.replace(`/auth/register?${params.toString()}`)
+    if (exists) {
+      const params = new URLSearchParams({ email, divertedFrom: "register" })
+      router.replace(`/auth/login?${params.toString()}`)
       return
     }
 
     const supabase = createClient()
+    const trimmedName = displayName.trim()
     const { error: otpError } = await supabase.auth.signInWithOtp({
       email: email.toLowerCase(),
       options: {
-        shouldCreateUser: false,
+        shouldCreateUser: true,
+        ...(trimmedName ? { data: { display_name: trimmedName } } : {}),
         ...(captchaToken ? { captchaToken } : {}),
       },
     })
@@ -100,8 +103,7 @@ export default function LoginPage() {
       return
     }
 
-    const redirectTo = searchParams.get("redirectTo") || "/home"
-    router.push(redirectTo)
+    router.push("/onboarding")
   }
 
   const handleBack = () => {
@@ -117,17 +119,17 @@ export default function LoginPage() {
           <CardHeader className="space-y-1 text-center">
             <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
               {step === "email" ? (
-                <Mail className="h-6 w-6 text-primary" />
+                <UserPlus className="h-6 w-6 text-primary" />
               ) : (
                 <KeyRound className="h-6 w-6 text-primary" />
               )}
             </div>
             <CardTitle className="text-2xl font-bold">
-              {step === "email" ? "Iniciar sesión" : "Introduce el código"}
+              {step === "email" ? "Crear cuenta" : "Introduce el código"}
             </CardTitle>
             <CardDescription>
               {step === "email"
-                ? "Introduce tu correo para acceder"
+                ? "Crea tu cuenta para empezar a usar VolleyScore."
                 : `Te hemos enviado un código a ${email}.`}
             </CardDescription>
           </CardHeader>
@@ -152,6 +154,22 @@ export default function LoginPage() {
                     autoComplete="email"
                     className="h-12"
                   />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="displayName">Tu nombre (opcional)</Label>
+                  <Input
+                    id="displayName"
+                    type="text"
+                    placeholder="Nombre y apellidos"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    autoComplete="name"
+                    className="h-12"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Aparecerá como autor de los partidos que anotes. Si lo dejas en blanco, usaremos tu
+                    correo.
+                  </p>
                 </div>
 
                 {siteKey && (
@@ -217,12 +235,12 @@ export default function LoginPage() {
             )}
             <div className="mt-6 text-center space-y-2">
               <p className="text-sm text-muted-foreground">
-                ¿Aún no tienes cuenta?{" "}
+                ¿Ya tienes cuenta?{" "}
                 <Link
-                  href={email ? `/auth/register?email=${encodeURIComponent(email)}` : "/auth/register"}
+                  href={email ? `/auth/login?email=${encodeURIComponent(email)}` : "/auth/login"}
                   className="text-foreground underline-offset-4 hover:underline"
                 >
-                  Crear cuenta
+                  Iniciar sesión
                 </Link>
               </p>
               <Link href="/" className="block text-sm text-muted-foreground hover:text-foreground transition-colors">
