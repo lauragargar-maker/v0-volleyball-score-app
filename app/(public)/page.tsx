@@ -36,7 +36,7 @@ export default function LandingPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container flex h-14 max-w-screen-xl items-center justify-between px-4">
+        <div className="container mx-auto flex h-14 max-w-screen-xl items-center justify-between px-4">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
               <span className="text-primary-foreground font-bold text-sm">VS</span>
@@ -52,7 +52,7 @@ export default function LandingPage() {
       </header>
 
       {/* Hero Section */}
-      <section className="container max-w-screen-xl px-4 py-16 md:py-24">
+      <section className="container mx-auto max-w-screen-xl px-4 py-16 md:py-24">
         <div className="flex flex-col items-center text-center gap-8">
           {/* Badge */}
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-sm font-medium">
@@ -96,7 +96,7 @@ export default function LandingPage() {
       </section>
 
       {/* Features Section */}
-      <section className="container max-w-screen-xl px-4 py-16 border-t border-border/40">
+      <section className="container mx-auto max-w-screen-xl px-4 py-16 border-t border-border/40">
         <div className="text-center mb-12">
           <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-4">
             Todo lo que necesitas para tus partidos
@@ -126,7 +126,7 @@ export default function LandingPage() {
       </section>
 
       {/* How it Works Section */}
-      <section className="container max-w-screen-xl px-4 py-16 border-t border-border/40">
+      <section className="container mx-auto max-w-screen-xl px-4 py-16 border-t border-border/40">
         <div className="text-center mb-12">
           <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-4">Cómo funciona</h2>
         </div>
@@ -165,7 +165,7 @@ export default function LandingPage() {
       </section>
 
       {/* CTA Section */}
-      <section className="container max-w-screen-xl px-4 py-16 border-t border-border/40">
+      <section className="container mx-auto max-w-screen-xl px-4 py-16 border-t border-border/40">
         <div className="bg-card border border-border/60 rounded-2xl p-8 md:p-12 text-center">
           <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-4">
             ¿Listo para empezar?
@@ -193,7 +193,7 @@ export default function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="container max-w-screen-xl px-4 py-8 border-t border-border/40">
+      <footer className="container mx-auto max-w-screen-xl px-4 py-8 border-t border-border/40">
         <div className="flex flex-col md:flex-row items-center justify-between gap-4 text-sm text-muted-foreground">
           <div className="flex items-center gap-2">
             <div className="w-6 h-6 rounded bg-primary/80 flex items-center justify-center">
