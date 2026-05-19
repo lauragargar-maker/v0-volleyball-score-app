@@ -5,6 +5,7 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Activity, Users, Clock, Share2, ChevronRight, Zap } from "lucide-react"
 import { InstantScoreWaitlistModal } from "@/components/landing/instant-score-waitlist-modal"
+import { LiveScorePreview } from "@/components/landing/live-score-preview"
 
 const features = [
   {
@@ -92,6 +93,11 @@ export default function LandingPage() {
           <p className="text-sm text-muted-foreground max-w-md">
             Crea tu club y guarda el historial, o empieza ya un partido sin registrarte.
           </p>
+
+          {/* Live-score preview */}
+          <div className="w-full mt-8 md:mt-12">
+            <LiveScorePreview />
+          </div>
         </div>
       </section>
 
