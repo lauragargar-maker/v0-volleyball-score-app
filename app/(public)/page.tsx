@@ -1,6 +1,10 @@
+"use client"
+
+import { useState } from "react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { Activity, Users, Clock, Share2, ChevronRight } from "lucide-react"
+import { Activity, Users, Clock, Share2, ChevronRight, Zap } from "lucide-react"
+import { InstantScoreWaitlistModal } from "@/components/landing/instant-score-waitlist-modal"
 
 const features = [
   {
@@ -10,22 +14,24 @@ const features = [
   },
   {
     icon: Users,
-    title: "Facil de Compartir",
+    title: "Fácil de Compartir",
     description: "Comparte el enlace del partido con familiares y amigos con un solo clic.",
   },
   {
     icon: Clock,
     title: "Historial Completo",
-    description: "Guarda automaticamente el resultado de cada partido para consultarlo despues.",
+    description: "Guarda automáticamente el resultado de cada partido para consultarlo después.",
   },
   {
     icon: Share2,
     title: "Acceso desde Cualquier Lugar",
-    description: "Funciona en moviles, tablets y ordenadores sin necesidad de instalar nada.",
+    description: "Funciona en móviles, tablets y ordenadores sin necesidad de instalar nada.",
   },
 ]
 
 export default function LandingPage() {
+  const [waitlistOpen, setWaitlistOpen] = useState(false)
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
@@ -38,7 +44,9 @@ export default function LandingPage() {
             <span className="font-semibold text-foreground">VolleyScore</span>
           </div>
           <Link href="/auth/login">
-            <Button size="sm">Iniciar Sesion</Button>
+            <Button size="sm" variant="ghost">
+              Iniciar sesión
+            </Button>
           </Link>
         </div>
       </header>
@@ -59,24 +67,31 @@ export default function LandingPage() {
 
           {/* Subheadline */}
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl text-pretty">
-            La forma mas sencilla de llevar el marcador de los partidos de voleibol de tu equipo
+            La forma más sencilla de llevar el marcador de los partidos de voleibol de tu equipo
             amateur y compartirlo con familiares y amigos.
           </p>
 
           {/* CTAs */}
-          <div className="flex flex-col sm:flex-row items-center gap-4 mt-4">
-            <Link href="/auth/login">
-              <Button size="lg" className="text-base px-8">
-                Iniciar Sesion
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 mt-4">
+            <Link href="/auth/register">
+              <Button size="lg" className="text-base px-8 w-full sm:w-auto">
+                Crear cuenta
                 <ChevronRight className="w-4 h-4 ml-2" />
               </Button>
             </Link>
-            <Link href="/solicitar-acceso">
-              <Button variant="outline" size="lg" className="text-base px-8 bg-transparent">
-                Solicitar Acceso
-              </Button>
-            </Link>
+            <Button
+              size="lg"
+              variant="outline"
+              className="text-base px-8 bg-transparent w-full sm:w-auto"
+              onClick={() => setWaitlistOpen(true)}
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Crear marcador instantáneo
+            </Button>
           </div>
+          <p className="text-sm text-muted-foreground max-w-md">
+            Crea tu club y guarda el historial, o empieza ya un partido sin registrarte.
+          </p>
         </div>
       </section>
 
@@ -87,7 +102,7 @@ export default function LandingPage() {
             Todo lo que necesitas para tus partidos
           </h2>
           <p className="text-muted-foreground max-w-xl mx-auto">
-            Disenado para ser simple y efectivo, sin complicaciones innecesarias.
+            Diseñado para ser simple y efectivo, sin complicaciones innecesarias.
           </p>
         </div>
 
@@ -113,9 +128,7 @@ export default function LandingPage() {
       {/* How it Works Section */}
       <section className="container max-w-screen-xl px-4 py-16 border-t border-border/40">
         <div className="text-center mb-12">
-          <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-4">
-            Como funciona
-          </h2>
+          <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-4">Cómo funciona</h2>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 max-w-4xl mx-auto">
@@ -123,7 +136,7 @@ export default function LandingPage() {
             <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground font-bold text-xl flex items-center justify-center mx-auto mb-4">
               1
             </div>
-            <h3 className="font-semibold text-foreground mb-2">Inicia un Partido</h3>
+            <h3 className="font-semibold text-foreground mb-2">Inicia un partido</h3>
             <p className="text-sm text-muted-foreground">
               Introduce los nombres de los equipos y comienza a registrar puntos.
             </p>
@@ -133,9 +146,9 @@ export default function LandingPage() {
             <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground font-bold text-xl flex items-center justify-center mx-auto mb-4">
               2
             </div>
-            <h3 className="font-semibold text-foreground mb-2">Comparte el Enlace</h3>
+            <h3 className="font-semibold text-foreground mb-2">Comparte el enlace</h3>
             <p className="text-sm text-muted-foreground">
-              Envia el link a quien quiera seguir el partido en directo.
+              Envía el link a quien quiera seguir el partido en directo.
             </p>
           </div>
 
@@ -143,9 +156,9 @@ export default function LandingPage() {
             <div className="w-12 h-12 rounded-full bg-primary text-primary-foreground font-bold text-xl flex items-center justify-center mx-auto mb-4">
               3
             </div>
-            <h3 className="font-semibold text-foreground mb-2">Actualiza en Vivo</h3>
+            <h3 className="font-semibold text-foreground mb-2">Actualiza en vivo</h3>
             <p className="text-sm text-muted-foreground">
-              Toca para sumar puntos y todos veran el marcador actualizado al instante.
+              Toca para sumar puntos y todos verán el marcador actualizado al instante.
             </p>
           </div>
         </div>
@@ -155,23 +168,26 @@ export default function LandingPage() {
       <section className="container max-w-screen-xl px-4 py-16 border-t border-border/40">
         <div className="bg-card border border-border/60 rounded-2xl p-8 md:p-12 text-center">
           <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-4">
-            Listo para empezar?
+            ¿Listo para empezar?
           </h2>
           <p className="text-muted-foreground mb-8 max-w-lg mx-auto">
-            Si eres entrenador o colaborador del equipo, solicita acceso y empieza a usar
-            VolleyScore en tu proximo partido.
+            Crea tu cuenta y empieza a llevar el marcador de los partidos de tu club, o prueba la
+            app sin registrarte con un marcador instantáneo.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/auth/login">
-              <Button size="lg" className="text-base px-8">
-                Iniciar Sesion
+            <Link href="/auth/register">
+              <Button size="lg" className="text-base px-8 w-full sm:w-auto">
+                Crear cuenta
               </Button>
             </Link>
-            <Link href="/solicitar-acceso">
-              <Button variant="outline" size="lg" className="text-base px-8 bg-transparent">
-                Solicitar Acceso
-              </Button>
-            </Link>
+            <Button
+              size="lg"
+              variant="outline"
+              className="text-base px-8 bg-transparent w-full sm:w-auto"
+              onClick={() => setWaitlistOpen(true)}
+            >
+              Crear marcador instantáneo
+            </Button>
           </div>
         </div>
       </section>
@@ -188,6 +204,8 @@ export default function LandingPage() {
           <p>Hecho con cariño para equipos de voleibol amateur</p>
         </div>
       </footer>
+
+      <InstantScoreWaitlistModal open={waitlistOpen} onOpenChange={setWaitlistOpen} />
     </div>
   )
 }

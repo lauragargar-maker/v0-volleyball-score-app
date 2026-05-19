@@ -2,7 +2,7 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 
 const PROTECTED_ROUTES = ["/home", "/historial", "/solicitudes", "/club", "/clubs", "/onboarding"]
-const AUTH_ROUTES = ["/auth/login", "/auth/error"]
+const AUTH_ROUTES = ["/auth/login", "/auth/register", "/auth/error"]
 const ONBOARDING_EXEMPT = ["/onboarding", "/clubs/new", "/clubs/join", "/auth"]
 
 export async function updateSession(request: NextRequest) {
