@@ -8,6 +8,7 @@ import { InstantScoreWaitlistModal } from "@/components/landing/instant-score-wa
 import { LiveScorePreview } from "@/components/landing/live-score-preview"
 import {
   HistoryListFragment,
+  NewMatchFragment,
   ScoreWidgetFragment,
   ShareLinkFragment,
 } from "@/components/landing/feature-fragments"
@@ -45,6 +46,7 @@ const features: Feature[] = [
     icon: Share2,
     title: "Acceso desde Cualquier Lugar",
     description: "Funciona en móviles, tablets y ordenadores sin necesidad de instalar nada.",
+    fragment: NewMatchFragment,
   },
 ]
 

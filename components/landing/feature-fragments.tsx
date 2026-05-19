@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge"
-import { Copy, Link2 } from "lucide-react"
+import { Copy, Link2, Play } from "lucide-react"
 
 // Compact visual fragments used inside the landing-page feature tiles.
 // Each fragment is purely presentational — hardcoded fake data, no
@@ -100,6 +100,37 @@ const historyRows: HistoryRow[] = [
     winner: "home",
   },
 ]
+
+/**
+ * New-match starter — companion to "Acceso desde Cualquier Lugar".
+ * Compact mirror of the empty-state "Iniciar nuevo partido" affordance,
+ * showing two team-name pills and a primary action button.
+ */
+export function NewMatchFragment() {
+  return (
+    <div
+      aria-hidden
+      className={`${FRAGMENT_HEIGHT} mb-4 flex flex-col justify-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-3 py-2`}
+    >
+      <p className="text-[10px] font-medium text-muted-foreground">Nuevo partido</p>
+      <div className="flex items-center gap-1.5">
+        <div className="flex-1 truncate rounded-md border border-border/60 bg-background px-2 py-1 text-[11px] text-foreground">
+          Voleibol Pamplona
+        </div>
+        <span className="text-[10px] text-muted-foreground">vs</span>
+        <div className="flex-1 truncate rounded-md border border-border/60 bg-background px-2 py-1 text-[11px] text-foreground">
+          CV Tudela
+        </div>
+      </div>
+      <div className="flex justify-end">
+        <span className="inline-flex items-center gap-1 rounded-md bg-primary px-2 py-0.5 text-[10px] font-medium text-primary-foreground">
+          <Play className="h-2.5 w-2.5 fill-current" />
+          Iniciar
+        </span>
+      </div>
+    </div>
+  )
+}
 
 export function HistoryListFragment() {
   return (
