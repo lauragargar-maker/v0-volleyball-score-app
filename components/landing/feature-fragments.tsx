@@ -9,6 +9,10 @@ import { Copy, Link2, Play } from "lucide-react"
 
 const FRAGMENT_HEIGHT = "h-24" // ~96px — visual parity with the icon tile in vertical rhythm
 
+// Shared wrapper styling so all fragments read as a distinct, inset "preview
+// panel" inside the feature tile rather than blending into the tile background.
+const FRAGMENT_WRAPPER = `${FRAGMENT_HEIGHT} mb-4 rounded-lg border-2 border-border bg-background/80 px-3 py-2 shadow-inner`
+
 /**
  * Score widget — companion to "Marcador en Tiempo Real".
  * Shows an EN VIVO pulse and a compact two-team score line.
@@ -17,7 +21,7 @@ export function ScoreWidgetFragment() {
   return (
     <div
       aria-hidden
-      className={`${FRAGMENT_HEIGHT} mb-4 flex flex-col justify-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2`}
+      className={`${FRAGMENT_WRAPPER} flex flex-col justify-center gap-2`}
     >
       <div className="flex items-center gap-1.5">
         <span className="relative flex h-2 w-2">
@@ -51,7 +55,7 @@ export function ShareLinkFragment() {
   return (
     <div
       aria-hidden
-      className={`${FRAGMENT_HEIGHT} mb-4 flex flex-col justify-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-2`}
+      className={`${FRAGMENT_WRAPPER} flex flex-col justify-center gap-2`}
     >
       <p className="text-[10px] font-medium text-muted-foreground">Enlace del partido</p>
       <div className="flex items-center gap-2 rounded-md border border-border/60 bg-background px-2 py-1.5">
@@ -110,7 +114,7 @@ export function NewMatchFragment() {
   return (
     <div
       aria-hidden
-      className={`${FRAGMENT_HEIGHT} mb-4 flex flex-col justify-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-3 py-2`}
+      className={`${FRAGMENT_WRAPPER} flex flex-col justify-center gap-1.5`}
     >
       <p className="text-[10px] font-medium text-muted-foreground">Nuevo partido</p>
       <div className="flex items-center gap-1.5">
@@ -136,7 +140,7 @@ export function HistoryListFragment() {
   return (
     <div
       aria-hidden
-      className={`${FRAGMENT_HEIGHT} mb-4 flex flex-col justify-center gap-1.5 rounded-lg border border-border/60 bg-muted/30 px-3 py-2`}
+      className={`${FRAGMENT_WRAPPER} flex flex-col justify-center gap-1.5`}
     >
       {historyRows.map((row, i) => (
         <div key={i} className="flex items-center justify-between gap-2 text-[11px]">
