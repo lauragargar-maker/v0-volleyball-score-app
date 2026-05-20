@@ -169,16 +169,19 @@ export function PublicLiveScore({ matchId }: PublicLiveScoreProps) {
   const isFinished = match.status === "finished" || match.status === "cancelled"
 
   // In presentation mode the score is bounded by BOTH viewport axes via min(),
-  // so it always fits without scrolling. Portrait stacks the teams (each number
-  // owns the full width); landscape keeps them side by side, bounded by height.
+  // so it always fits without scrolling. svh (small viewport height) keeps it
+  // within the visible area even while mobile browser chrome is showing.
+  // Portrait stacks the teams (each number owns the full width); landscape keeps
+  // them side by side, bounded by height. The vw cap drives the size on wide
+  // screens (tablet/desktop); the svh cap drives it on short phone landscape.
   const scoreSize = isPresenting
-    ? "leading-[0.9] portrait:text-[min(52vw,32vh)] landscape:text-[min(26vw,46vh)]"
+    ? "leading-[0.9] portrait:text-[min(56vw,40svh)] landscape:text-[min(32vw,44svh)]"
     : "text-6xl md:text-8xl lg:text-9xl"
   const teamNameSize = isPresenting
-    ? "mb-1 truncate text-xl sm:text-2xl md:text-3xl lg:text-4xl"
+    ? "mb-1 truncate text-xl sm:text-2xl md:text-3xl lg:text-4xl xl:text-5xl"
     : "mb-2 text-sm md:mb-3 md:text-xl lg:text-2xl"
   const vsSize = isPresenting
-    ? "text-2xl sm:text-3xl md:text-4xl"
+    ? "text-2xl sm:text-3xl md:text-4xl lg:text-5xl"
     : "text-2xl md:text-4xl lg:text-5xl"
 
   return (
@@ -186,7 +189,7 @@ export function PublicLiveScore({ matchId }: PublicLiveScoreProps) {
       ref={rootRef}
       className={
         isPresenting
-          ? "fixed inset-0 z-50 flex h-[100dvh] w-screen flex-col items-center gap-2 overflow-hidden bg-background px-4 py-4"
+          ? "fixed inset-x-0 top-0 z-50 flex h-[100svh] w-screen flex-col items-center gap-2 overflow-hidden bg-background px-4 py-3"
           : "relative space-y-6 md:space-y-8"
       }
     >
