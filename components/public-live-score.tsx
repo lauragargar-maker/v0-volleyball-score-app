@@ -168,14 +168,17 @@ export function PublicLiveScore({ matchId }: PublicLiveScoreProps) {
 
   const isFinished = match.status === "finished" || match.status === "cancelled"
 
+  // In presentation mode the score is bounded by BOTH viewport axes via min(),
+  // so it always fits without scrolling. Portrait stacks the teams (each number
+  // owns the full width); landscape keeps them side by side, bounded by height.
   const scoreSize = isPresenting
-    ? "text-[clamp(5rem,22vw,20rem)] leading-none"
+    ? "leading-[0.9] portrait:text-[min(52vw,32vh)] landscape:text-[min(26vw,46vh)]"
     : "text-6xl md:text-8xl lg:text-9xl"
   const teamNameSize = isPresenting
-    ? "mb-4 text-2xl sm:text-3xl md:text-4xl lg:text-5xl"
+    ? "mb-1 truncate text-xl sm:text-2xl md:text-3xl lg:text-4xl"
     : "mb-2 text-sm md:mb-3 md:text-xl lg:text-2xl"
   const vsSize = isPresenting
-    ? "text-3xl md:text-5xl lg:text-6xl"
+    ? "text-2xl sm:text-3xl md:text-4xl"
     : "text-2xl md:text-4xl lg:text-5xl"
 
   return (
@@ -183,7 +186,7 @@ export function PublicLiveScore({ matchId }: PublicLiveScoreProps) {
       ref={rootRef}
       className={
         isPresenting
-          ? "fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 overflow-y-auto bg-background p-6 md:gap-10 md:p-10"
+          ? "fixed inset-0 z-50 flex h-[100dvh] w-screen flex-col items-center gap-2 overflow-hidden bg-background px-4 py-4"
           : "relative space-y-6 md:space-y-8"
       }
     >
@@ -201,8 +204,12 @@ export function PublicLiveScore({ matchId }: PublicLiveScoreProps) {
         )}
       </button>
 
-      {/* Status indicator */}
-      <div className="flex items-center justify-center gap-2 md:gap-3">
+      {/* Status indicator (moved to the bottom in presentation mode) */}
+      <div
+        className={`flex items-center justify-center gap-2 md:gap-3 ${
+          isPresenting ? "order-last" : ""
+        }`}
+      >
         {match.status === "in_progress" ? (
           <>
             <span className="relative flex h-3 w-3 md:h-4 md:w-4">
@@ -222,7 +229,7 @@ export function PublicLiveScore({ matchId }: PublicLiveScoreProps) {
       <Card
         className={
           isPresenting
-            ? "w-full max-w-6xl overflow-hidden border-0 bg-transparent shadow-none"
+            ? "flex w-full max-w-6xl flex-1 flex-col overflow-visible border-0 bg-transparent shadow-none"
             : "w-full overflow-hidden"
         }
       >
@@ -242,10 +249,16 @@ export function PublicLiveScore({ matchId }: PublicLiveScoreProps) {
         </div>
 
         {/* Team scores */}
-        <div className="p-6 md:p-10 lg:p-14">
-          <div className="flex items-center justify-between gap-4 md:gap-8">
+        <div className={isPresenting ? "flex w-full flex-1 items-center justify-center" : "p-6 md:p-10 lg:p-14"}>
+          <div
+            className={
+              isPresenting
+                ? "flex items-center justify-between gap-2 portrait:flex-col portrait:gap-1 landscape:flex-row landscape:gap-6"
+                : "flex items-center justify-between gap-4 md:gap-8"
+            }
+          >
             {/* Home team */}
-            <div className="flex-1 text-center">
+            <div className="min-w-0 flex-1 text-center">
               <p className={`truncate font-medium text-muted-foreground ${teamNameSize}`}>
                 {match.home_team}
               </p>
@@ -255,12 +268,12 @@ export function PublicLiveScore({ matchId }: PublicLiveScoreProps) {
             </div>
 
             {/* Divider */}
-            <div className="flex flex-col items-center gap-2">
+            <div className="flex shrink-0 flex-col items-center gap-2">
               <span className={`font-light text-muted-foreground ${vsSize}`}>vs</span>
             </div>
 
             {/* Away team */}
-            <div className="flex-1 text-center">
+            <div className="min-w-0 flex-1 text-center">
               <p className={`truncate font-medium text-muted-foreground ${teamNameSize}`}>
                 {match.away_team}
               </p>
@@ -290,8 +303,8 @@ export function PublicLiveScore({ matchId }: PublicLiveScoreProps) {
         )}
       </Card>
 
-      {/* Sets results (secondary, kept compact) */}
-      {sets.length > 0 && (
+      {/* Sets results (secondary, kept compact) — hidden in presentation mode */}
+      {!isPresenting && sets.length > 0 && (
         <div className="w-full space-y-2 md:space-y-3">
           <h3 className={`text-sm font-medium text-muted-foreground ${isPresenting ? "text-center" : ""}`}>
             Resultado de sets
