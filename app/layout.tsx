@@ -4,6 +4,7 @@ import { Inter } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/components/auth-provider"
 import { Toaster } from "@/components/ui/toaster"
+import { FeedbackButton } from "@/components/feedback/feedback-button"
 import "./globals.css"
 
 const inter = Inter({ subsets: ["latin"] })
@@ -32,6 +33,7 @@ export default function RootLayout({
       <body className={`${inter.className} font-sans antialiased`}>
         <AuthProvider>
           <main className="min-h-svh">{children}</main>
+          <FeedbackButton />
         </AuthProvider>
         <Toaster />
         <Analytics />
