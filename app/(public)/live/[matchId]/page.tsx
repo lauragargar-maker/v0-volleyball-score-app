@@ -24,7 +24,7 @@ export default async function LiveMatchPage({ params }: LiveMatchPageProps) {
       </header>
 
       {/* Score display */}
-      <main className="container max-w-lg px-4 py-8">
+      <main className="mx-auto w-full max-w-lg px-4 py-8 md:max-w-3xl md:py-12 lg:max-w-5xl lg:py-16">
         <PublicLiveScore matchId={matchId} />
       </main>
     </div>
