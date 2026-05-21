@@ -40,8 +40,8 @@ export default function OnboardingPage() {
                 Solicita unirte a un club existente buscandolo por nombre o codigo.
               </p>
             </div>
-            <Button asChild variant="outline" className="w-full" disabled>
-              <Link href="/clubs/join">Proximamente</Link>
+            <Button asChild variant="outline" className="w-full">
+              <Link href="/clubs/join">Buscar club</Link>
             </Button>
           </Card>
         </div>

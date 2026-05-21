@@ -6,13 +6,14 @@ import { useAuth } from "@/components/auth-provider"
 import { useClub } from "@/components/club-provider"
 import { ActiveClubBadge } from "@/components/active-club-badge"
 import { Button } from "@/components/ui/button"
-import { Home, History, Users, LogOut, Menu, X } from "lucide-react"
+import { Home, History, Users, UserCog, LogOut, Menu, X } from "lucide-react"
 import { useMemo, useState } from "react"
 
 const baseNavItems = [
   { href: "/home", label: "Home", icon: Home, adminOnly: false },
   { href: "/historial", label: "Historial", icon: History, adminOnly: false },
   { href: "/club/requests", label: "Solicitudes", icon: Users, adminOnly: true },
+  { href: "/club/members", label: "Miembros", icon: UserCog, adminOnly: true },
 ]
 
 export function AuthenticatedHeader() {
