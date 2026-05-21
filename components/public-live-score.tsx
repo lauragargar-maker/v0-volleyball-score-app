@@ -207,10 +207,16 @@ export function PublicLiveScore({ matchId }: PublicLiveScoreProps) {
         )}
       </button>
 
-      {/* Status indicator (moved to the bottom in presentation mode) */}
+      {/* Status indicator (moved to the bottom in presentation mode). On tall
+          landscape screens (laptop, tablet landscape) it gets a bottom margin
+          that scales with height so it doesn't sit flush at the very bottom.
+          Gated to landscape + min-height so short phone-landscape and portrait
+          (where stacked numbers already fill the height) are unaffected. */}
       <div
         className={`flex items-center justify-center gap-2 md:gap-3 ${
-          isPresenting ? "order-last" : ""
+          isPresenting
+            ? "order-last landscape:[@media(min-height:600px)]:mb-[8vh]"
+            : ""
         }`}
       >
         {match.status === "in_progress" ? (
