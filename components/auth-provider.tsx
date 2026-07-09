@@ -70,7 +70,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return
       }
 
-      setUser(currentUser)
+      // Keep the user object identity stable across TOKEN_REFRESHED echoes
+      // (fired every time the tab resumes): a new object here cascades into
+      // membership refetches and match reloads in downstream providers.
+      setUser((prev) =>
+        prev && prev.id === currentUser.id && prev.updated_at === currentUser.updated_at ? prev : currentUser,
+      )
       setIsLoading(false)
     })
 

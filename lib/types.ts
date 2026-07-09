@@ -22,6 +22,7 @@ export interface Set {
   status: "in_progress" | "finished"
   winner?: string
   created_at: string
+  score_version: number
 }
 
 export interface MatchMedia {
