@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { createClient } from "@/lib/supabase/client"
-import type { Match, Set } from "@/lib/types"
+import { useLiveMatch } from "@/lib/hooks/use-live-match"
 import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Loader2, Maximize2, Minimize2, Radio } from "lucide-react"
@@ -12,100 +11,9 @@ interface PublicLiveScoreProps {
 }
 
 export function PublicLiveScore({ matchId }: PublicLiveScoreProps) {
-  const [match, setMatch] = useState<Match | null>(null)
-  const [sets, setSets] = useState<Set[]>([])
-  const [currentSet, setCurrentSet] = useState<Set | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const { match, sets, currentSet, isLoading, error } = useLiveMatch(matchId)
   const [isPresenting, setIsPresenting] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const supabase = createClient()
-
-    const fetchMatch = async () => {
-      setIsLoading(true)
-      setError(null)
-
-      try {
-        const { data, error: matchError } = await supabase
-          .from("matches")
-          .select("*")
-          .eq("id", matchId)
-          .single()
-
-        if (matchError) {
-          setError("No se encontro el partido")
-          setIsLoading(false)
-          return
-        }
-
-        setMatch(data)
-
-        const { data: setsData } = await supabase
-          .from("sets")
-          .select("*")
-          .eq("match_id", data.id)
-          .order("set_number", { ascending: true })
-
-        if (setsData) {
-          setSets(setsData)
-          const active = setsData.find((s) => s.status === "in_progress")
-          setCurrentSet(active || setsData[setsData.length - 1] || null)
-        }
-      } catch {
-        setError("Error al cargar el partido")
-      } finally {
-        setIsLoading(false)
-      }
-    }
-
-    fetchMatch()
-
-    // Subscribe to realtime updates
-    const matchChannel = supabase
-      .channel(`match-${matchId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "matches", filter: `id=eq.${matchId}` },
-        (payload) => {
-          if (payload.eventType === "UPDATE") {
-            setMatch(payload.new as Match)
-          }
-        }
-      )
-      .subscribe()
-
-    const setsChannel = supabase
-      .channel(`sets-${matchId}`)
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "sets", filter: `match_id=eq.${matchId}` },
-        (payload) => {
-          if (payload.eventType === "UPDATE" || payload.eventType === "INSERT") {
-            const newSet = payload.new as Set
-            setSets((prev) => {
-              const existing = prev.findIndex((s) => s.id === newSet.id)
-              if (existing >= 0) {
-                const updated = [...prev]
-                updated[existing] = newSet
-                return updated
-              }
-              return [...prev, newSet].sort((a, b) => a.set_number - b.set_number)
-            })
-            if (newSet.status === "in_progress") {
-              setCurrentSet(newSet)
-            }
-          }
-        }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(matchChannel)
-      supabase.removeChannel(setsChannel)
-    }
-  }, [matchId])
 
   // Keep local state in sync if the user exits native fullscreen (e.g. Esc)
   useEffect(() => {

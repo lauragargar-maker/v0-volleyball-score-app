@@ -28,6 +28,13 @@ const ClubContext = createContext<ClubContextType>({
   refresh: async () => {},
 })
 
+function membershipsEqual(a: Membership[], b: Membership[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every(
+    (m, i) => m.club.id === b[i].club.id && m.role === b[i].role && m.club.name === b[i].club.name,
+  )
+}
+
 function readStoredActiveClubId(): string | null {
   if (typeof window === "undefined") return null
   try {
@@ -51,13 +58,15 @@ export function ClubProvider({ children }: { children: React.ReactNode }) {
   const [activeClubId, setActiveClubIdState] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
+  const userId = user?.id ?? null
+
   const fetchMemberships = useCallback(async (): Promise<Membership[]> => {
-    if (!user) return []
+    if (!userId) return []
     const supabase = createClient()
     const { data, error } = await supabase
       .from("club_members")
       .select("role, joined_at, clubs:club_id(*)")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .order("joined_at", { ascending: true })
 
     if (error || !data) return []
@@ -65,11 +74,14 @@ export function ClubProvider({ children }: { children: React.ReactNode }) {
     return data
       .filter((row: any) => row.clubs)
       .map((row: any) => ({ club: row.clubs as Club, role: row.role as ClubRole }))
-  }, [user])
+  }, [userId])
 
   const refresh = useCallback(async () => {
     const list = await fetchMemberships()
-    setMemberships(list)
+    // Keep array identity stable when nothing changed: a new memberships
+    // array produces a new activeClub object, which would make every screen
+    // keyed on it (e.g. the scoring console) refetch on tab resume.
+    setMemberships((prev) => (membershipsEqual(prev, list) ? prev : list))
 
     setActiveClubIdState((current) => {
       const stored = current ?? readStoredActiveClubId()
@@ -84,29 +96,29 @@ export function ClubProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (authLoading) return
-    if (!user) {
+    if (!userId) {
       setMemberships([])
       setActiveClubIdState(null)
       setIsLoading(false)
       return
     }
     refresh()
-  }, [authLoading, user, refresh])
+  }, [authLoading, userId, refresh])
 
   // Subscribe to changes on this user's memberships so removals/role changes
   // are reflected immediately without requiring a manual refresh.
   useEffect(() => {
-    if (!user) return
+    if (!userId) return
     const supabase = createClient()
     const channel = supabase
-      .channel(`club-members:user:${user.id}`)
+      .channel(`club-members:user:${userId}`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "club_members",
-          filter: `user_id=eq.${user.id}`,
+          filter: `user_id=eq.${userId}`,
         },
         () => {
           refresh()
@@ -117,7 +129,7 @@ export function ClubProvider({ children }: { children: React.ReactNode }) {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user, refresh])
+  }, [userId, refresh])
 
   // Persist active club id
   useEffect(() => {

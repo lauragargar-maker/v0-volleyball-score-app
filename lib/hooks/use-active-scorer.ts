@@ -23,17 +23,20 @@ export interface UseActiveScorerResult {
   reclaim: () => Promise<{ ok: boolean; error?: string }>
   touch: () => Promise<{ ok: boolean; error?: string }>
   release: () => Promise<void>
+  refetch: () => Promise<void>
   dismissReclaimedNotice: () => void
 }
 
 export function useActiveScorer(matchId: string | null): UseActiveScorerResult {
   const { user } = useAuth()
+  const userId = user?.id ?? null
   const supabase = createClient()
   const [state, setState] = useState<ScorerLockState>({ status: "loading" })
   const [expiringSoon, setExpiringSoon] = useState(false)
   const [reclaimedNotice, setReclaimedNotice] = useState<string | null>(null)
   const wasOwnerRef = useRef(false)
   const warningTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastMatchIdRef = useRef<string | null>(null)
 
   const clearWarningTimer = () => {
     if (warningTimerRef.current) {
@@ -54,7 +57,7 @@ export function useActiveScorer(matchId: string | null): UseActiveScorerResult {
 
   const applyRow = useCallback(
     (row: ActiveScorer | null) => {
-      if (!user) return
+      if (!userId) return
       if (!row) {
         if (wasOwnerRef.current) {
           // Lock disappeared while we owned it (cron cleanup or manual release).
@@ -64,7 +67,7 @@ export function useActiveScorer(matchId: string | null): UseActiveScorerResult {
         setState({ status: "unclaimed" })
         return
       }
-      if (row.user_id === user.id) {
+      if (row.user_id === userId) {
         wasOwnerRef.current = true
         scheduleWarning(row.last_activity)
         setState({ status: "owned", row })
@@ -78,7 +81,9 @@ export function useActiveScorer(matchId: string | null): UseActiveScorerResult {
         setState({ status: "locked_by_other", row })
       }
     },
-    [user, scheduleWarning],
+    // Keyed on the id (a stable string) so token-refresh echoes that produce
+    // a new user object don't cascade into refetches/resubscriptions.
+    [userId, scheduleWarning],
   )
 
   const fetchRow = useCallback(async () => {
@@ -92,10 +97,15 @@ export function useActiveScorer(matchId: string | null): UseActiveScorerResult {
   }, [matchId, supabase, applyRow])
 
   useEffect(() => {
-    if (!matchId || !user) return
-    setState({ status: "loading" })
+    if (!matchId || !userId) return
+    // Only reset to "loading" (which disables the score buttons) when the
+    // match actually changed — not on auth echoes or silent refetches.
+    if (lastMatchIdRef.current !== matchId) {
+      lastMatchIdRef.current = matchId
+      setState({ status: "loading" })
+    }
     fetchRow()
-  }, [matchId, user, fetchRow])
+  }, [matchId, userId, fetchRow])
 
   // Realtime subscription for changes on this match's lock.
   useEffect(() => {
@@ -197,6 +207,7 @@ export function useActiveScorer(matchId: string | null): UseActiveScorerResult {
     reclaim,
     touch,
     release,
+    refetch: fetchRow,
     dismissReclaimedNotice,
   }
 }

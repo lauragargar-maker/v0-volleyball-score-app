@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState, useTransition } from "react"
+import { useEffect, useMemo, useRef, useState, useTransition } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useAuth } from "@/components/auth-provider"
 import { useClub } from "@/components/club-provider"
@@ -60,12 +60,57 @@ export default function HomePage() {
 
   const scorer = useActiveScorer(match?.id ?? null)
 
+  // Optimistic-scoring reconciliation state. While taps are in flight the
+  // optimistic local score is authoritative on screen; server rows (RPC
+  // responses, realtime echoes, refetches) are recorded here and flushed
+  // once the in-flight count reaches zero. score_version orders rows that
+  // arrive out of order (e.g. an RPC response beating an older realtime echo).
+  const pendingOpsRef = useRef(0)
+  const latestServerSetsRef = useRef<Record<string, Set>>({})
+  const currentSetRef = useRef<Set | null>(null)
+
+  useEffect(() => {
+    currentSetRef.current = currentSet
+  }, [currentSet])
+
+  const paintSet = (row: Set) => {
+    setSets((prev) => prev.map((s) => (s.id === row.id ? row : s)))
+    setCurrentSet((prev) => (prev && prev.id === row.id ? row : prev))
+  }
+
+  // Returns the row if it is at least as new as anything seen for that set,
+  // null if it is stale and must not be painted. Equal versions pass through
+  // so non-score updates (status/winner don't bump score_version) still apply.
+  const recordServerSet = (row: Set): Set | null => {
+    const prev = latestServerSetsRef.current[row.id]
+    if (prev && (row.score_version ?? 0) < (prev.score_version ?? 0)) return null
+    latestServerSetsRef.current[row.id] = row
+    return row
+  }
+
+  const settleScoreOp = (setId: string, row: Set | null) => {
+    pendingOpsRef.current -= 1
+    if (row) recordServerSet(row)
+    if (pendingOpsRef.current === 0) {
+      const latest = latestServerSetsRef.current[setId]
+      if (latest) paintSet(latest)
+    }
+  }
+
+  const resyncSet = async (setId: string) => {
+    const { data } = await supabase.from("sets").select("*").eq("id", setId).single()
+    if (!data) return
+    const accepted = recordServerSet(data as Set)
+    if (accepted && pendingOpsRef.current === 0) paintSet(accepted)
+  }
+
   // Pre-fill home team default when active club changes.
   useEffect(() => {
     if (activeClub) setHomeTeam(activeClub.name)
   }, [activeClub])
 
-  // Load active match for the active club.
+  // Load active match for the active club. Keyed on the id (not the object)
+  // so provider refreshes that produce a new-but-identical club don't refetch.
   useEffect(() => {
     if (!activeClub) {
       setIsLoading(false)
@@ -75,7 +120,7 @@ export default function HomePage() {
       return
     }
     fetchActiveMatch(activeClub.id)
-  }, [activeClub])
+  }, [activeClub?.id])
 
   // Subscribe to score updates for the loaded match so locked viewers stay live.
   useEffect(() => {
@@ -91,9 +136,12 @@ export default function HomePage() {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "sets", filter: `match_id=eq.${match.id}` },
         (payload) => {
-          const updated = payload.new as Set
-          setSets((prev) => prev.map((s) => (s.id === updated.id ? updated : s)))
-          setCurrentSet((prev) => (prev && prev.id === updated.id ? updated : prev))
+          const accepted = recordServerSet(payload.new as Set)
+          if (!accepted) return
+          // Hold echoes for the set we're optimistically scoring; they get
+          // flushed when the last in-flight op settles.
+          if (pendingOpsRef.current > 0 && currentSetRef.current?.id === accepted.id) return
+          paintSet(accepted)
         },
       )
       .on(
@@ -110,7 +158,27 @@ export default function HomePage() {
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [match, supabase])
+    // Keyed on the id: match object identity changes on every UPDATE payload
+    // and would otherwise tear down/recreate the channel per score change.
+  }, [match?.id, supabase])
+
+  // Silent catch-up when the tab wakes up: the background may have suspended
+  // the realtime socket, so refetch match + scorer lock without any spinner.
+  useEffect(() => {
+    if (!activeClub) return
+    const clubId = activeClub.id
+    const wake = () => {
+      if (document.visibilityState !== "visible") return
+      fetchActiveMatch(clubId)
+      scorer.refetch()
+    }
+    document.addEventListener("visibilitychange", wake)
+    window.addEventListener("online", wake)
+    return () => {
+      document.removeEventListener("visibilitychange", wake)
+      window.removeEventListener("online", wake)
+    }
+  }, [activeClub?.id, scorer.refetch])
 
   // Auto-acquire the scorer lock when the match has no active scorer.
   // Covers the case where the previous scorer's lock expired (cron cleanup)
@@ -132,8 +200,10 @@ export default function HomePage() {
     })
   }, [scorer.scorerUserId, user?.id, supabase, scorerEmails])
 
+  // Stale-while-revalidate: never flips isLoading back on, so refetches
+  // (club refresh, tab resume) update in place instead of showing the
+  // full-screen spinner. The spinner only covers the true first load.
   const fetchActiveMatch = async (clubId: string) => {
-    setIsLoading(true)
     const { data: matchData } = await supabase
       .from("matches")
       .select("*")
@@ -152,8 +222,16 @@ export default function HomePage() {
         .order("set_number", { ascending: true })
 
       if (setsData) {
-        setSets(setsData)
-        const active = setsData.find((s) => s.status === "in_progress")
+        // Never let a fetched row overwrite a newer one already seen via
+        // realtime or an RPC response (out-of-order protection).
+        const merged = (setsData as Set[]).map((row) => {
+          const known = latestServerSetsRef.current[row.id]
+          const newest = known && (known.score_version ?? 0) > (row.score_version ?? 0) ? known : row
+          latestServerSetsRef.current[row.id] = newest
+          return newest
+        })
+        setSets(merged)
+        const active = merged.find((s) => s.status === "in_progress")
         setCurrentSet(active || null)
       }
     } else {
@@ -227,7 +305,7 @@ export default function HomePage() {
     showNotification("Partido iniciado", `${newMatch.home_team} vs ${newMatch.away_team}`)
   }
 
-  const updateScore = async (team: "home" | "away", delta: number) => {
+  const updateScore = (team: "home" | "away", delta: number) => {
     if (!currentSet || !match) return
     if (!scorer.isActiveScorer) return
 
@@ -236,37 +314,45 @@ export default function HomePage() {
     const field = team === "home" ? "home_score" : "away_score"
     const previousScore = currentSet[field]
     const newScore = Math.max(0, Math.min(scoreLimit, previousScore + delta))
+    if (newScore === previousScore) return
 
-    // Refresh active scorer activity so the timeout doesn't fire mid-rally.
-    const touch = await scorer.touch()
-    if (!touch.ok) {
-      showNotification("Error", "Has perdido el control del marcador", "error")
-      return
-    }
-
-    const { data: updatedSet, error } = await supabase
-      .from("sets")
-      .update({ [field]: newScore })
-      .eq("id", currentSet.id)
-      .select()
-      .single()
-
-    if (error || !updatedSet) {
-      showNotification("Error", "No se pudo actualizar el marcador", "error")
-      return
-    }
-
-    setCurrentSet(updatedSet)
-    setSets((prev) => prev.map((s) => (s.id === updatedSet.id ? updatedSet : s)))
+    // Optimistic paint: the number moves on this tap, before any network.
+    const optimistic = { ...currentSet, [field]: newScore }
+    paintSet(optimistic)
 
     const setEnds = isThirdSet
       ? newScore >= 15
-      : newScore >= 25 && Math.abs(updatedSet.home_score - updatedSet.away_score) >= 2
+      : newScore >= 25 && Math.abs(optimistic.home_score - optimistic.away_score) >= 2
 
     if (setEnds) {
-      setPendingSetData({ updatedSet, team, previousScore })
+      setPendingSetData({ updatedSet: optimistic, team, previousScore })
       setShowConfirmSetEndDialog(true)
     }
+
+    // One atomic round-trip: the RPC applies the delta with server-side
+    // clamping and refreshes the scorer lock (no separate touch call).
+    // The UI does not wait for it; settleScoreOp reconciles when it lands.
+    pendingOpsRef.current += 1
+    supabase
+      .rpc("increment_set_score", { _set_id: optimistic.id, _team: team, _delta: delta })
+      .then(({ data, error }: { data: Set | null; error: { message: string } | null }) => {
+        if (error || !data) {
+          settleScoreOp(optimistic.id, null)
+          if (setEnds) {
+            setShowConfirmSetEndDialog(false)
+            setPendingSetData(null)
+          }
+          const lostLock = error?.message.includes("not_active_scorer") ?? false
+          showNotification(
+            "Error",
+            lostLock ? "Has perdido el control del marcador" : "No se pudo actualizar el marcador",
+            "error",
+          )
+          void resyncSet(optimistic.id)
+          return
+        }
+        settleScoreOp(optimistic.id, data)
+      })
   }
 
   const finishSet = async (set: Set) => {
@@ -347,8 +433,8 @@ export default function HomePage() {
       .select()
       .single()
     if (revertedSet) {
-      setCurrentSet(revertedSet)
-      setSets((prev) => prev.map((s) => (s.id === revertedSet.id ? revertedSet : s)))
+      const accepted = recordServerSet(revertedSet as Set)
+      if (accepted) paintSet(accepted)
     }
     setShowConfirmSetEndDialog(false)
     setPendingSetData(null)
