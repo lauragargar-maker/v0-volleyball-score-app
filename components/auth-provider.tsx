@@ -30,12 +30,45 @@ function getSupabaseStorageKey(): string {
   return `sb-${projectRef}-auth-token`
 }
 
+// @supabase/ssr's browser client persists the session in cookies (not
+// localStorage): `sb-<ref>-auth-token`, split into `.0`/`.1`... chunks when
+// large, with the JSON optionally base64url-encoded behind a `base64-` prefix.
+function readAuthCookieValue(key: string): string | null {
+  const found: Record<string, string> = {}
+  for (const part of document.cookie.split(";")) {
+    const eq = part.indexOf("=")
+    if (eq === -1) continue
+    const name = part.slice(0, eq).trim()
+    if (name !== key && !name.startsWith(`${key}.`)) continue
+    const value = part.slice(eq + 1).trim()
+    try {
+      found[name] = decodeURIComponent(value)
+    } catch {
+      found[name] = value
+    }
+  }
+  if (found[key]) return found[key]
+  const chunks: string[] = []
+  for (let i = 0; found[`${key}.${i}`] !== undefined; i++) {
+    chunks.push(found[`${key}.${i}`])
+  }
+  return chunks.length > 0 ? chunks.join("") : null
+}
+
+function decodeSessionCookie(raw: string): unknown {
+  if (!raw.startsWith("base64-")) return JSON.parse(raw)
+  const b64 = raw.slice("base64-".length).replace(/-/g, "+").replace(/_/g, "/")
+  const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4)
+  const bytes = Uint8Array.from(atob(padded), (c) => c.charCodeAt(0))
+  return JSON.parse(new TextDecoder().decode(bytes))
+}
+
 function readCachedSession(): User | null {
   if (typeof window === "undefined") return null
   try {
-    const raw = localStorage.getItem(getSupabaseStorageKey())
+    const raw = readAuthCookieValue(getSupabaseStorageKey())
     if (!raw) return null
-    const parsed = JSON.parse(raw)
+    const parsed = decodeSessionCookie(raw) as { user?: User | null; expires_at?: number } | null
     const user = parsed?.user ?? null
     if (!user?.email) return null
     const expiresAt: number = parsed?.expires_at ?? 0
