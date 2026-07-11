@@ -30,12 +30,40 @@ function getSupabaseStorageKey(): string {
   return `sb-${projectRef}-auth-token`
 }
 
+// @supabase/ssr's createBrowserClient persists the session in cookies (not
+// localStorage): either a single `sb-<ref>-auth-token` cookie or chunked
+// `sb-<ref>-auth-token.0`, `.1`, ... cookies, with the JSON payload encoded
+// as `base64-<base64url>`.
+function readSessionCookie(name: string): string | null {
+  if (typeof document === "undefined") return null
+  const cookies = document.cookie.split("; ")
+  const valueOf = (key: string): string | null => {
+    const match = cookies.find((c) => c.startsWith(`${key}=`))
+    return match ? decodeURIComponent(match.slice(key.length + 1)) : null
+  }
+  const direct = valueOf(name)
+  if (direct !== null) return direct
+  const chunks: string[] = []
+  for (let i = 0; ; i++) {
+    const chunk = valueOf(`${name}.${i}`)
+    if (chunk === null) break
+    chunks.push(chunk)
+  }
+  return chunks.length > 0 ? chunks.join("") : null
+}
+
+function decodeSessionCookie(raw: string): string {
+  if (!raw.startsWith("base64-")) return raw
+  const base64 = raw.slice("base64-".length).replace(/-/g, "+").replace(/_/g, "/")
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4)
+  return atob(padded)
+}
+
 function readCachedSession(): User | null {
-  if (typeof window === "undefined") return null
   try {
-    const raw = localStorage.getItem(getSupabaseStorageKey())
+    const raw = readSessionCookie(getSupabaseStorageKey())
     if (!raw) return null
-    const parsed = JSON.parse(raw)
+    const parsed = JSON.parse(decodeSessionCookie(raw))
     const user = parsed?.user ?? null
     if (!user?.email) return null
     const expiresAt: number = parsed?.expires_at ?? 0
@@ -47,10 +75,8 @@ function readCachedSession(): User | null {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const cachedUser = readCachedSession()
-
-  const [user, setUser] = useState<User | null>(cachedUser)
-  const [isLoading, setIsLoading] = useState(cachedUser === null)
+  const [user, setUser] = useState<User | null>(() => readCachedSession())
+  const [isLoading, setIsLoading] = useState(user === null)
   const isMountedRef = useRef(true)
 
   useEffect(() => {

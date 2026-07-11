@@ -7,6 +7,7 @@ import { useAuth } from "@/components/auth-provider"
 import type { Club, ClubRole, Membership } from "@/lib/types"
 
 const ACTIVE_CLUB_KEY = "volleyball-active-club"
+const MEMBERSHIPS_CACHE_KEY = "volleyball-memberships"
 
 interface ClubContextType {
   memberships: Membership[]
@@ -52,15 +53,57 @@ function writeStoredActiveClubId(id: string | null): void {
   } catch {}
 }
 
+// Last known memberships snapshot, kept per user so a full page load can
+// render clubs immediately instead of waiting for the club_members fetch.
+// refresh() reconciles it against the server in the background.
+function readCachedMemberships(userId: string | null): Membership[] | null {
+  if (!userId || typeof window === "undefined") return null
+  try {
+    const raw = localStorage.getItem(MEMBERSHIPS_CACHE_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    if (parsed?.userId !== userId || !Array.isArray(parsed.memberships)) return null
+    return parsed.memberships as Membership[]
+  } catch {
+    return null
+  }
+}
+
+function writeCachedMemberships(userId: string, memberships: Membership[]): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.setItem(MEMBERSHIPS_CACHE_KEY, JSON.stringify({ userId, memberships }))
+  } catch {}
+}
+
+function clearCachedMemberships(): void {
+  if (typeof window === "undefined") return
+  try {
+    localStorage.removeItem(MEMBERSHIPS_CACHE_KEY)
+  } catch {}
+}
+
+function pickActiveClubId(list: Membership[], stored: string | null): string | null {
+  if (stored !== null && list.some((m) => m.club.id === stored)) return stored
+  if (list.length === 1) return list[0].club.id
+  return null
+}
+
 export function ClubProvider({ children }: { children: React.ReactNode }) {
   const { user, isLoading: authLoading } = useAuth()
-  const [memberships, setMemberships] = useState<Membership[]>([])
-  const [activeClubId, setActiveClubIdState] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-
   const userId = user?.id ?? null
 
-  const fetchMemberships = useCallback(async (): Promise<Membership[]> => {
+  // When the auth user was seeded synchronously (from the session cookie),
+  // seed memberships from the per-user cache in the same render so the
+  // layout never has to show its loading gate on warm page loads.
+  const [seeded] = useState<Membership[] | null>(() => readCachedMemberships(userId))
+  const [memberships, setMemberships] = useState<Membership[]>(seeded ?? [])
+  const [activeClubId, setActiveClubIdState] = useState<string | null>(() =>
+    seeded ? pickActiveClubId(seeded, readStoredActiveClubId()) : null,
+  )
+  const [isLoading, setIsLoading] = useState(seeded === null)
+
+  const fetchMemberships = useCallback(async (): Promise<Membership[] | null> => {
     if (!userId) return []
     const supabase = createClient()
     const { data, error } = await supabase
@@ -69,7 +112,7 @@ export function ClubProvider({ children }: { children: React.ReactNode }) {
       .eq("user_id", userId)
       .order("joined_at", { ascending: true })
 
-    if (error || !data) return []
+    if (error || !data) return null
 
     return data
       .filter((row: any) => row.clubs)
@@ -78,25 +121,30 @@ export function ClubProvider({ children }: { children: React.ReactNode }) {
 
   const refresh = useCallback(async () => {
     const list = await fetchMemberships()
+
+    // Transient fetch failure: keep whatever we have (cached or previous)
+    // rather than flashing empty-club states or poisoning the cache.
+    if (list === null) {
+      setIsLoading(false)
+      return
+    }
+
+    if (userId) writeCachedMemberships(userId, list)
+
     // Keep array identity stable when nothing changed: a new memberships
     // array produces a new activeClub object, which would make every screen
     // keyed on it (e.g. the scoring console) refetch on tab resume.
     setMemberships((prev) => (membershipsEqual(prev, list) ? prev : list))
 
-    setActiveClubIdState((current) => {
-      const stored = current ?? readStoredActiveClubId()
-      const isStoredValid = stored !== null && list.some((m) => m.club.id === stored)
-      if (isStoredValid) return stored
-      if (list.length === 1) return list[0].club.id
-      return null
-    })
+    setActiveClubIdState((current) => pickActiveClubId(list, current ?? readStoredActiveClubId()))
 
     setIsLoading(false)
-  }, [fetchMemberships])
+  }, [fetchMemberships, userId])
 
   useEffect(() => {
     if (authLoading) return
     if (!userId) {
+      clearCachedMemberships()
       setMemberships([])
       setActiveClubIdState(null)
       setIsLoading(false)

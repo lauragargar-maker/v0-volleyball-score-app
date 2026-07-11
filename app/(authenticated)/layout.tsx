@@ -1,14 +1,29 @@
 "use client"
 
 import type React from "react"
+import { useSyncExternalStore } from "react"
 import { useAuth } from "@/components/auth-provider"
 import { ClubProvider, useClub } from "@/components/club-provider"
 import { AuthenticatedHeader } from "@/components/authenticated-header"
 
+const emptySubscribe = () => () => {}
+
+// False during SSR and the hydration render, true right after. The providers
+// seed user/memberships synchronously on the client, so without this the
+// hydration render (content) would not match the server HTML (spinner).
+function useHydrated() {
+  return useSyncExternalStore(
+    emptySubscribe,
+    () => true,
+    () => false,
+  )
+}
+
 function Inner({ children }: { children: React.ReactNode }) {
   const { isLoading: authLoading } = useAuth()
   const { isLoading: clubLoading } = useClub()
-  const isLoading = authLoading || clubLoading
+  const hydrated = useHydrated()
+  const isLoading = !hydrated || authLoading || clubLoading
 
   if (isLoading) {
     return (
