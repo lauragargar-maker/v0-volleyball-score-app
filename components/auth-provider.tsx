@@ -80,10 +80,8 @@ function readCachedSession(): User | null {
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const cachedUser = readCachedSession()
-
-  const [user, setUser] = useState<User | null>(cachedUser)
-  const [isLoading, setIsLoading] = useState(cachedUser === null)
+  const [user, setUser] = useState<User | null>(() => readCachedSession())
+  const [isLoading, setIsLoading] = useState(user === null)
   const isMountedRef = useRef(true)
 
   useEffect(() => {
